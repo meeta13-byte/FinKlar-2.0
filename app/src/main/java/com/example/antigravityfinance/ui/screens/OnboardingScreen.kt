@@ -95,7 +95,7 @@ fun OnboardingScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Welcome to FinKlar",
+                    text = "Welcome to FinKlar 2.0",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.Black
@@ -260,7 +260,7 @@ fun OnboardingScreen(
                                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
                                                 Text(
-                                                    text = "Welcome to FinKlar, your secure offline-first financial partner.",
+                                                    text = "Welcome to FinKlar 2.0, your secure offline-first financial partner.",
                                                     fontWeight = FontWeight.Bold,
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
@@ -271,7 +271,7 @@ fun OnboardingScreen(
                                                 )
                                                 
                                                 Text(
-                                                    text = "2. Absolute Privacy\nFinKlar is an offline-first app. Your financial records, SMS histories, and budgets are never stored, transmitted, or shared with external servers. All processing runs entirely on your device.",
+                                                    text = "2. Absolute Privacy\nFinKlar 2.0 is an offline-first app. Your financial records, SMS histories, and budgets are never stored, transmitted, or shared with external servers. All processing runs entirely on your device.",
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
                                                 

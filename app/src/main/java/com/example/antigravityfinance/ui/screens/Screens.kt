@@ -368,7 +368,7 @@ fun SetupInitialIncomeDialog(
                 )
                 
                 Text(
-                    text = "Welcome to FinKlar",
+                    text = "Welcome to FinKlar 2.0",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center
                 )
@@ -818,7 +818,7 @@ fun DashboardScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = userName.ifBlank { "FinKlar" },
+                    text = userName.ifBlank { "FinKlar 2.0" },
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -2441,7 +2441,7 @@ fun AssistantScreen(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
-                label = { Text("Ask FinKlar AI...") },
+                label = { Text("Ask FinKlar 2.0 AI...") },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),

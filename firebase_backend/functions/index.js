@@ -63,7 +63,7 @@ exports.sendOTP = functions.https.onRequest(async (req, res) => {
     // Send SMS via Twilio
     const client = twilio(accountSid, authToken);
     await client.messages.create({
-      body: `Your FinKlar verification code is ${otp}. It is valid for 5 minutes.`,
+      body: `Your FinKlar 2.0 verification code is ${otp}. It is valid for 5 minutes.`,
       from: twilioPhone,
       to: phoneNumber
     });

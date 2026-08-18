@@ -1,6 +1,6 @@
-# FinKlar
+# FinKlar 2.0
 
-FinKlar is a professional, offline-first personal finance and money management mobile application designed for secure, localized banking analysis. Built with Jetpack Compose, Material 3, and Kotlin, the application integrates SQLite encryption, automatic transaction detection via SMS parsing, Gemini-powered OCR receipt extraction, and an intelligent financial chatbot assistant.
+FinKlar 2.0 is a professional, offline-first personal finance and money management mobile application designed for secure, localized banking analysis. Built with Jetpack Compose, Material 3, and Kotlin, the application integrates SQLite encryption, automatic transaction detection via SMS parsing, Gemini-powered OCR receipt extraction, and an intelligent financial chatbot assistant.
 
 ---
 

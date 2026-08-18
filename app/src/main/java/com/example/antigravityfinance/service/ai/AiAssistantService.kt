@@ -165,7 +165,7 @@ object AiAssistantService {
                 transactions, budgets, goals, investments, setZeroTimestamp, currencySymbol
             )
             val systemPrompt = """
-                You are FinKlar, a premium AI personal finance advisor focused on helping the user
+                You are FinKlar 2.0, a premium AI personal finance advisor focused on helping the user
                 save money and optimize their expenses.
 
                 Here is the user's financial profile data:
@@ -212,7 +212,7 @@ object AiAssistantService {
                 transactions, budgets, goals, investments, setZeroTimestamp, currencySymbol
             )
             val systemPrompt = """
-                You are FinKlar, an AI savings advisor. Based on the user's financial data below,
+                You are FinKlar 2.0, an AI savings advisor. Based on the user's financial data below,
                 produce exactly 3 short, actionable, quantified money-saving tips tailored to their
                 actual spending. Reference real categories and amounts. Each tip must be one sentence,
                 use $currencySymbol for amounts, and avoid generic filler.

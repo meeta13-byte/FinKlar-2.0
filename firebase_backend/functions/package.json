@@ -1,6 +1,6 @@
 {
   "name": "functions",
-  "description": "Cloud Functions for FinKlar Twilio OTP Verification",
+  "description": "Cloud Functions for FinKlar 2.0 Twilio OTP Verification",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",

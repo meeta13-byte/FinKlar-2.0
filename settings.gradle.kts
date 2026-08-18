@@ -29,5 +29,5 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "FInklar-1"
+rootProject.name = "FinKlar-2.0"
 include(":app")
