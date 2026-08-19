@@ -30,7 +30,7 @@ import kotlinx.coroutines.delay
 
 enum class MainTab(val displayName: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Rounded.Dashboard),
-    TRANSACTIONS("Wallet", Icons.Rounded.ReceiptLong),
+    TRANSACTIONS("Transactions", Icons.Rounded.ReceiptLong),
     ASSISTANT("AI Chat", Icons.Rounded.AutoAwesome),
     FINANCIAL_TOOLS("Financial Tools", Icons.Rounded.Widgets),
     SETTINGS("Settings", Icons.Rounded.Settings)

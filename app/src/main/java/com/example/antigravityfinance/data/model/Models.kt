@@ -58,8 +58,32 @@ data class Transaction(
     val status: TransactionStatus = TransactionStatus.CONFIRMED,
     val isIncome: Boolean = false,
     val isRecurring: Boolean = false,
-    val detectedFromSms: Boolean = false
+    val detectedFromSms: Boolean = false,
+    val walletId: Int? = null
 )
+
+@Serializable
+data class Wallet(
+    val id: Int = 0,
+    val name: String,
+    val balance: Double,
+    val purpose: String? = null,
+    val isDefault: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis(),
+    val investedAmount: Double = 0.0,
+    val initialAmount: Double = 0.0
+)
+
+@Serializable
+data class WalletTransfer(
+    val id: Int = 0,
+    val fromWalletId: Int,
+    val toWalletId: Int,
+    val amount: Double,
+    val note: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 
 @Serializable
 data class Budget(

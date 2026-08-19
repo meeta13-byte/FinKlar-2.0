@@ -2,6 +2,8 @@ package com.example.antigravityfinance.data.local.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.ForeignKey
+import androidx.room.Index
 import com.example.antigravityfinance.data.model.Budget
 import com.example.antigravityfinance.data.model.BudgetPeriod
 import com.example.antigravityfinance.data.model.Investment
@@ -9,8 +11,21 @@ import com.example.antigravityfinance.data.model.SavingsGoal
 import com.example.antigravityfinance.data.model.Transaction
 import com.example.antigravityfinance.data.model.TransactionStatus
 import com.example.antigravityfinance.data.model.SplitShare
+import com.example.antigravityfinance.data.model.Wallet
+import com.example.antigravityfinance.data.model.WalletTransfer
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    foreignKeys = [
+        ForeignKey(
+            entity = WalletEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["walletId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [Index("walletId")]
+)
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val amount: Double,
@@ -22,7 +37,8 @@ data class TransactionEntity(
     val status: String = "CONFIRMED", // PENDING, CONFIRMED, CANCELLED
     val isIncome: Boolean = false,
     val isRecurring: Boolean = false,
-    val detectedFromSms: Boolean = false
+    val detectedFromSms: Boolean = false,
+    val walletId: Int? = null
 ) {
     fun toDomain(): Transaction = Transaction(
         id = id,
@@ -35,7 +51,8 @@ data class TransactionEntity(
         status = TransactionStatus.valueOf(status),
         isIncome = isIncome,
         isRecurring = isRecurring,
-        detectedFromSms = detectedFromSms
+        detectedFromSms = detectedFromSms,
+        walletId = walletId
     )
 
     companion object {
@@ -50,10 +67,12 @@ data class TransactionEntity(
             status = domain.status.name,
             isIncome = domain.isIncome,
             isRecurring = domain.isRecurring,
-            detectedFromSms = domain.detectedFromSms
+            detectedFromSms = domain.detectedFromSms,
+            walletId = domain.walletId
         )
     }
 }
+
 
 @Entity(tableName = "budgets")
 data class BudgetEntity(
@@ -197,4 +216,71 @@ data class SplitEntity(
         )
     }
 }
+
+@Entity(tableName = "wallets")
+data class WalletEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val balance: Double,
+    val purpose: String?,
+    val isDefault: Boolean,
+    val createdAt: Long,
+    val investedAmount: Double = 0.0,
+    val initialAmount: Double = 0.0
+) {
+    fun toDomain(): Wallet = Wallet(
+        id = id,
+        name = name,
+        balance = balance,
+        purpose = purpose,
+        isDefault = isDefault,
+        createdAt = createdAt,
+        investedAmount = investedAmount,
+        initialAmount = initialAmount
+    )
+
+    companion object {
+        fun fromDomain(domain: Wallet): WalletEntity = WalletEntity(
+            id = domain.id,
+            name = domain.name,
+            balance = domain.balance,
+            purpose = domain.purpose,
+            isDefault = domain.isDefault,
+            createdAt = domain.createdAt,
+            investedAmount = domain.investedAmount,
+            initialAmount = domain.initialAmount
+        )
+    }
+}
+
+@Entity(tableName = "wallet_transfers")
+data class WalletTransferEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val fromWalletId: Int,
+    val toWalletId: Int,
+    val amount: Double,
+    val note: String?,
+    val timestamp: Long
+) {
+    fun toDomain(): WalletTransfer = WalletTransfer(
+        id = id,
+        fromWalletId = fromWalletId,
+        toWalletId = toWalletId,
+        amount = amount,
+        note = note,
+        timestamp = timestamp
+    )
+
+    companion object {
+        fun fromDomain(domain: WalletTransfer): WalletTransferEntity = WalletTransferEntity(
+            id = domain.id,
+            fromWalletId = domain.fromWalletId,
+            toWalletId = domain.toWalletId,
+            amount = domain.amount,
+            note = domain.note,
+            timestamp = domain.timestamp
+        )
+    }
+}
+
 

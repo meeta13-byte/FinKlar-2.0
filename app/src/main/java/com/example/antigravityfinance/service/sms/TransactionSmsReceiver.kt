@@ -44,7 +44,7 @@ class TransactionSmsReceiver : BroadcastReceiver() {
             val result = com.example.antigravityfinance.service.sms.detection.SmsDetectionModule.detect(body, senderId, timestamp, trustedSenders)
 
             val db = FinanceDatabase.getDatabase(context)
-            val repo = TransactionRepository(db.transactionDao(), db.recurringMerchantDao(), db.budgetDao())
+            val repo = TransactionRepository(db.transactionDao(), db.recurringMerchantDao(), db.budgetDao(), db.walletDao())
 
             if (result.availableBalance != null) {
                 securityHelper.saveSyncedBalance(result.availableBalance)

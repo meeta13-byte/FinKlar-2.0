@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.antigravityfinance.service.security.SecurityHelper
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -14,9 +16,11 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         SavingsGoalEntity::class,
         InvestmentEntity::class,
         RecurringMerchantEntity::class,
-        SplitEntity::class
+        SplitEntity::class,
+        WalletEntity::class,
+        WalletTransferEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
@@ -26,7 +30,8 @@ abstract class FinanceDatabase : RoomDatabase() {
     abstract fun investmentDao(): InvestmentDao
     abstract fun recurringMerchantDao(): RecurringMerchantDao
     abstract fun splitDao(): SplitDao
-
+    abstract fun walletDao(): WalletDao
+    abstract fun walletTransferDao(): WalletTransferDao
 
     companion object {
         @Volatile
@@ -35,6 +40,49 @@ abstract class FinanceDatabase : RoomDatabase() {
         init {
             // Load native SQLCipher binary components
             System.loadLibrary("sqlcipher")
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create wallets table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `wallets` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `balance` REAL NOT NULL,
+                        `purpose` TEXT,
+                        `isDefault` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `investedAmount` REAL NOT NULL DEFAULT 0.0,
+                        `initialAmount` REAL NOT NULL DEFAULT 0.0
+                    )
+                """.trimIndent())
+
+                // Create wallet_transfers table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `wallet_transfers` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `fromWalletId` INTEGER NOT NULL,
+                        `toWalletId` INTEGER NOT NULL,
+                        `amount` REAL NOT NULL,
+                        `note` TEXT,
+                        `timestamp` INTEGER NOT NULL
+                    )
+                """.trimIndent())
+
+                // Add walletId column to transactions
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `walletId` INTEGER REFERENCES `wallets`(`id`) ON DELETE SET NULL")
+
+                // Create index on walletId in transactions
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_walletId` ON `transactions` (`walletId`)")
+
+                // Seed the Default Spending Wallet
+                val now = System.currentTimeMillis()
+                db.execSQL("INSERT INTO `wallets` (`name`, `balance`, `purpose`, `isDefault`, `createdAt`, `investedAmount`) VALUES ('Default Spending Wallet', 0.0, 'Default spending wallet', 1, $now, 0.0)")
+
+                // Backfill existing transactions with the default wallet's id (which is 1)
+                db.execSQL("UPDATE `transactions` SET `walletId` = 1 WHERE `walletId` IS NULL")
+            }
         }
 
         fun getDatabase(context: Context): FinanceDatabase {
@@ -50,7 +98,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                     "finance_secure_db"
                 )
                 .openHelperFactory(factory)
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_3_4)
                 .build()
                 
                 INSTANCE = instance

@@ -28,6 +28,9 @@ interface TransactionDao {
 
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions(): Unit
+
+    @Query("SELECT * FROM transactions WHERE walletId = :walletId ORDER BY date DESC")
+    fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>>
 }
 
 @Dao
@@ -110,4 +113,53 @@ interface SplitDao {
     @Delete
     suspend fun delete(split: SplitEntity): Unit
 }
+
+@Dao
+interface WalletDao {
+    @Query("SELECT * FROM wallets ORDER BY createdAt ASC")
+    fun getAllWallets(): Flow<List<WalletEntity>>
+
+    @Query("SELECT * FROM wallets WHERE id = :id")
+    suspend fun getWalletById(id: Int): WalletEntity?
+
+    @Query("SELECT * FROM wallets WHERE isDefault = 1 LIMIT 1")
+    suspend fun getDefaultWallet(): WalletEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(wallet: WalletEntity): Long
+
+    @Update
+    suspend fun update(wallet: WalletEntity)
+
+    @Delete
+    suspend fun delete(wallet: WalletEntity)
+
+    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 1")
+    suspend fun getIncomeSum(walletId: Int): Double?
+
+    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 0")
+    suspend fun getExpenseSum(walletId: Int): Double?
+
+    @Query("SELECT SUM(amount) FROM wallet_transfers WHERE toWalletId = :walletId")
+    suspend fun getTransfersInSum(walletId: Int): Double?
+
+    @Query("SELECT SUM(amount) FROM wallet_transfers WHERE fromWalletId = :walletId")
+    suspend fun getTransfersOutSum(walletId: Int): Double?
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE walletId = :walletId")
+    suspend fun getTransactionCount(walletId: Int): Int
+}
+
+@Dao
+interface WalletTransferDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(transfer: WalletTransferEntity): Long
+
+    @Query("SELECT * FROM wallet_transfers ORDER BY timestamp DESC")
+    fun getAllTransfers(): Flow<List<WalletTransferEntity>>
+
+    @Query("SELECT * FROM wallet_transfers WHERE fromWalletId = :walletId OR toWalletId = :walletId ORDER BY timestamp DESC")
+    fun getTransfersForWallet(walletId: Int): Flow<List<WalletTransferEntity>>
+}
+
 

@@ -742,6 +742,7 @@ fun DashboardScreen(
     val smsSyncedBalance by viewModel.smsSyncedBalance.collectAsState()
     val investments by viewModel.investments.collectAsState()
     val userName by viewModel.userName.collectAsState()
+    val wallets by viewModel.allWallets.collectAsState()
 
     val emiAmount by viewModel.emiAmount.collectAsState()
     val emiDay by viewModel.emiDay.collectAsState()
@@ -751,6 +752,8 @@ fun DashboardScreen(
     var showCreditDialog by remember { mutableStateOf(false) }
     var showDebitDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showAddWalletDialog by remember { mutableStateOf(false) }
+    var showWalletDetailId by remember { mutableStateOf<Int?>(null) }
 
     val totalSipAmount = remember(investments) {
         investments.filter { it.type == "SIP" }.sumOf { it.investedAmount }
@@ -959,6 +962,134 @@ fun DashboardScreen(
                 }
             }
         }
+
+        Text(
+            text = "Wallet Balances".translate(language),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            wallets.forEach { wallet ->
+                val spent = transactions.filter { it.walletId == wallet.id && it.status == com.example.antigravityfinance.data.model.TransactionStatus.CONFIRMED && !it.isIncome }.sumOf { it.amount }
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (wallet.isDefault) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier
+                        .width(180.dp)
+                        .clickable { showWalletDetailId = wallet.id }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = wallet.name,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${currency.symbol}${String.format("%,.0f", wallet.balance)}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        if (wallet.initialAmount > 0.0) {
+                            val remaining = wallet.initialAmount - spent
+                            Text(
+                                text = "Spent: ${currency.symbol}${String.format("%,.0f", spent)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Rem: ${currency.symbol}${String.format("%,.0f", remaining)}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                fontSize = 10.sp,
+                                color = if (remaining >= 0.0) AccentEmerald else MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            // "+" Card to add wallet
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier
+                    .width(100.dp)
+                    .clickable { showAddWalletDialog = true }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 16.dp)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "Add Wallet",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Add Wallet".translate(language),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showAddWalletDialog) {
+            AddWalletDialog(
+                language = language,
+                onDismiss = { showAddWalletDialog = false },
+                onSave = { name, purpose, investedAmount, initialAmount, isDefault ->
+                    viewModel.addWallet(name, purpose, investedAmount, initialAmount, isDefault)
+                    showAddWalletDialog = false
+                }
+            )
+        }
+
+        if (showWalletDetailId != null) {
+            Dialog(
+                onDismissRequest = { showWalletDetailId = null }
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.9f),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    WalletDetailScreen(
+                        walletId = showWalletDetailId!!,
+                        viewModel = viewModel,
+                        onBack = { showWalletDetailId = null }
+                    )
+                }
+            }
+        }
+
 
         // ── Upcoming Commitments Card ─────────────────────────────────────────────
         Card(
@@ -1834,12 +1965,17 @@ fun TransactionsScreen(
         }
     }
 
+    val walletsList by viewModel.allWallets.collectAsState()
+    val defaultWallet = remember(walletsList) { walletsList.find { it.isDefault } }
     if (showManualDialog) {
         ManualTransactionDialog(
             currencySymbol = currency.symbol,
+            walletsList = walletsList,
+            defaultWalletId = defaultWallet?.id,
+            language = language,
             onDismiss = { showManualDialog = false },
-            onSave = { amount, merchant, isIncome, category ->
-                viewModel.addManualTransaction(amount, merchant, isIncome, category)
+            onSave = { amount, merchant, isIncome, category, walletId ->
+                viewModel.addManualTransaction(amount, merchant, isIncome, category, walletId)
                 showManualDialog = false
             }
         )
@@ -2201,13 +2337,18 @@ fun DetailRow(label: String, value: String, icon: ImageVector) {
 @Composable
 fun ManualTransactionDialog(
     currencySymbol: String,
+    walletsList: List<Wallet>,
+    defaultWalletId: Int?,
+    language: com.example.antigravityfinance.data.model.LanguageType,
     onDismiss: () -> Unit,
-    onSave: (amount: Double, merchant: String, isIncome: Boolean, category: String) -> Unit
+    onSave: (amount: Double, merchant: String, isIncome: Boolean, category: String, walletId: Int?) -> Unit
 ) {
     var amountText by remember { mutableStateOf("") }
     var merchant by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("FOOD") }
+    var selectedWalletId by remember { mutableStateOf(defaultWalletId) }
+    var walletExpanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -2221,7 +2362,7 @@ fun ManualTransactionDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Add Transaction",
+                    text = "Add Transaction".translate(language),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                 )
 
@@ -2236,7 +2377,7 @@ fun ManualTransactionDialog(
                         shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Debit", color = if (!isIncome) Color.White else MaterialTheme.colorScheme.onSurface)
+                        Text("Debit".translate(language), color = if (!isIncome) Color.White else MaterialTheme.colorScheme.onSurface)
                     }
                     Button(
                         onClick = { isIncome = true },
@@ -2246,14 +2387,14 @@ fun ManualTransactionDialog(
                         shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Credit", color = if (isIncome) Color.White else MaterialTheme.colorScheme.onSurface)
+                        Text("Credit".translate(language), color = if (isIncome) Color.White else MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
-                    label = { Text("Amount ($currencySymbol)") },
+                    label = { Text("Amount (${currencySymbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2261,12 +2402,48 @@ fun ManualTransactionDialog(
                 OutlinedTextField(
                     value = merchant,
                     onValueChange = { merchant = it },
-                    label = { Text("Merchant / Source") },
+                    label = { Text("Merchant / Source".translate(language)) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Column {
-                    Text("Category", style = MaterialTheme.typography.bodySmall)
+                    Text("Wallet".translate(language), style = MaterialTheme.typography.bodySmall)
+                    val currentWallet = walletsList.find { it.id == selectedWalletId }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { walletExpanded = true }
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(currentWallet?.name ?: "Select Wallet".translate(language))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = walletExpanded,
+                        onDismissRequest = { walletExpanded = false }
+                    ) {
+                        walletsList.forEach { w ->
+                            DropdownMenuItem(
+                                text = { Text(w.name) },
+                                onClick = {
+                                    selectedWalletId = w.id
+                                    walletExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Column {
+                    Text("Category".translate(language), style = MaterialTheme.typography.bodySmall)
                     FlowRow(
                         mainAxisSpacing = 4.dp,
                         crossAxisSpacing = 4.dp,
@@ -2277,7 +2454,7 @@ fun ManualTransactionDialog(
                             InputChip(
                                 selected = selected,
                                 onClick = { category = cat.name },
-                                label = { Text(cat.displayName, fontSize = 11.sp) }
+                                label = { Text(cat.displayName.translate(language), fontSize = 11.sp) }
                             )
                         }
                     }
@@ -2288,18 +2465,18 @@ fun ManualTransactionDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text("Cancel")
+                        Text("Cancel".translate(language))
                     }
                     Button(
                         onClick = {
                             val amount = amountText.toDoubleOrNull() ?: 0.0
                             if (amount > 0 && merchant.isNotBlank()) {
-                                onSave(amount, merchant, isIncome, category)
+                                onSave(amount, merchant, isIncome, category, selectedWalletId)
                             }
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Save")
+                        Text("Save".translate(language))
                     }
                 }
             }

@@ -31,10 +31,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val db = FinanceDatabase.getDatabase(application)
     private val securityHelper = SecurityHelper(application)
     
-    val transactionRepository = TransactionRepository(db.transactionDao(), db.recurringMerchantDao(), db.budgetDao())
+    val transactionRepository = TransactionRepository(db.transactionDao(), db.recurringMerchantDao(), db.budgetDao(), db.walletDao())
     val budgetRepository = BudgetRepository(db.budgetDao())
     val goalRepository = GoalRepository(db.savingsGoalDao())
     val investmentRepository = InvestmentRepository(db.investmentDao())
+    val walletRepository = WalletRepository(db.walletDao(), db.walletTransferDao(), db.transactionDao(), db)
+
 
     // --- SECURITY FLOW STATE ---
     private val _isPinSet = MutableStateFlow(securityHelper.isPinSet())
@@ -311,6 +313,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         list.map { it.toDomain() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allWallets: StateFlow<List<Wallet>> = walletRepository.allWallets
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allTransfers: StateFlow<List<WalletTransfer>> = walletRepository.allTransfers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+
     // --- OCR SCANNING WORKFLOW STATE ---
     private val _isOcrScanning = MutableStateFlow(false)
     val isOcrScanning: StateFlow<Boolean> = _isOcrScanning.asStateFlow()
@@ -365,6 +374,18 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     budgetRepository.insertBudget(Budget(category = "All", limitAmount = 25000.0))
                     budgetRepository.insertBudget(Budget(category = "FOOD", limitAmount = 8000.0))
                     budgetRepository.insertBudget(Budget(category = "SHOPPING", limitAmount = 5000.0))
+                }
+            }
+
+            walletRepository.allWallets.first().let { current ->
+                if (current.isEmpty()) {
+                    val now = System.currentTimeMillis()
+                    walletRepository.insertWallet(Wallet(name = "Default Spending Wallet", balance = 11500.0, purpose = "Default spending wallet", isDefault = true, createdAt = now, investedAmount = 0.0, initialAmount = 11500.0))
+                    walletRepository.insertWallet(Wallet(name = "Personal Savings", balance = 27844.0, purpose = "Personal savings", isDefault = false, createdAt = now + 1, investedAmount = 9968.0, initialAmount = 27844.0))
+                    walletRepository.insertWallet(Wallet(name = "Monthly Living", balance = 0.0, purpose = "Monthly living expenses", isDefault = false, createdAt = now + 2, investedAmount = 0.0, initialAmount = 0.0))
+                    walletRepository.insertWallet(Wallet(name = "Investments", balance = 9968.0, purpose = "Invested savings", isDefault = false, createdAt = now + 3, investedAmount = 0.0, initialAmount = 9968.0))
+                    walletRepository.insertWallet(Wallet(name = "Future Expenses", balance = 0.0, purpose = "Future planned expenses", isDefault = false, createdAt = now + 4, investedAmount = 0.0, initialAmount = 0.0))
+                    walletRepository.insertWallet(Wallet(name = "Money Receivable", balance = 1800.0, purpose = "Lent out money (asset)", isDefault = false, createdAt = now + 5, investedAmount = 0.0, initialAmount = 1800.0))
                 }
             }
 
@@ -604,7 +625,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun addManualTransaction(amount: Double, merchant: String, isIncome: Boolean, category: String) {
+    fun addManualTransaction(amount: Double, merchant: String, isIncome: Boolean, category: String, walletId: Int? = null) {
         viewModelScope.launch {
             val newTx = Transaction(
                 amount = amount,
@@ -612,7 +633,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 date = System.currentTimeMillis(),
                 category = category,
                 isIncome = isIncome,
-                status = TransactionStatus.CONFIRMED
+                status = TransactionStatus.CONFIRMED,
+                walletId = walletId
             )
             transactionRepository.insertTransaction(newTx)
         }
@@ -721,7 +743,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             if (tx != null) {
                 transactionRepository.insertTransaction(tx)
             }
-            callback(tx)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                callback(tx)
+            }
         }
     }
 
@@ -1054,6 +1078,75 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             3 -> AccentCrimson
             4 -> AccentSky
             else -> null
+        }
+    }
+
+    // --- WALLET ACTIONS ---
+    fun addWallet(name: String, purpose: String?, investedAmount: Double = 0.0, initialAmount: Double = 0.0, isDefault: Boolean = false) {
+        viewModelScope.launch {
+            val walletId = walletRepository.insertWallet(
+                Wallet(
+                    name = name,
+                    balance = initialAmount,
+                    purpose = purpose,
+                    isDefault = isDefault,
+                    createdAt = System.currentTimeMillis(),
+                    investedAmount = investedAmount,
+                    initialAmount = initialAmount
+                )
+            )
+            if (isDefault) {
+                walletRepository.setDefaultWallet(walletId)
+            }
+        }
+    }
+
+    fun updateWallet(wallet: Wallet) {
+        viewModelScope.launch {
+            walletRepository.updateWallet(wallet)
+        }
+    }
+
+    fun deleteWallet(wallet: Wallet, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            if (wallet.isDefault) {
+                onError("The Default Spending Wallet cannot be deleted, only renamed.")
+                return@launch
+            }
+            if (wallet.balance != 0.0) {
+                onError("Cannot delete a wallet with non-zero balance. Please move the balance out first.")
+                return@launch
+            }
+            val success = walletRepository.deleteWallet(wallet)
+            if (success) {
+                onSuccess()
+            } else {
+                onError("Cannot delete a wallet with active transactions or history.")
+            }
+        }
+    }
+
+    fun setDefaultWallet(walletId: Int) {
+        viewModelScope.launch {
+            walletRepository.setDefaultWallet(walletId)
+        }
+    }
+
+    fun transferMoney(
+        fromWalletId: Int,
+        toWalletId: Int,
+        amount: Double,
+        note: String?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                walletRepository.transferMoney(fromWalletId, toWalletId, amount, note)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Failed to perform transfer.")
+            }
         }
     }
 }
