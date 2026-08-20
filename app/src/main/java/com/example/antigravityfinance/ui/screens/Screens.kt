@@ -839,7 +839,8 @@ fun ProgressRingCard(
 fun AlertCard(
     title: String,
     dueDate: String,
-    amount: String
+    amount: String,
+    onClick: () -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -847,6 +848,7 @@ fun AlertCard(
         modifier = Modifier
             .width(140.dp)
             .height(110.dp)
+            .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier
@@ -994,6 +996,7 @@ fun DashboardScreen(
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showAddWalletDialog by remember { mutableStateOf(false) }
     var showWalletDetailId by remember { mutableStateOf<Int?>(null) }
+    var showEditCommitments by remember { mutableStateOf(false) }
 
     val totalSipAmount = remember(investments) {
         investments.filter { it.type == "SIP" }.sumOf { it.investedAmount }
@@ -1125,39 +1128,79 @@ fun DashboardScreen(
                 AlertCard(
                     title = "SIP",
                     dueDate = getFormattedDueDay(sipDay),
-                    amount = "${currency.symbol}${String.format("%,.0f", sipAmount)}"
+                    amount = "${currency.symbol}${String.format("%,.0f", sipAmount)}",
+                    onClick = { showEditCommitments = true }
                 )
             }
             if (hasRent) {
                 AlertCard(
                     title = "Rent",
                     dueDate = getFormattedDueDay(31),
-                    amount = "${currency.symbol}${String.format("%,.0f", rentAmount)}"
+                    amount = "${currency.symbol}${String.format("%,.0f", rentAmount)}",
+                    onClick = { showEditCommitments = true }
                 )
             }
             if (hasEmi) {
                 AlertCard(
                     title = "EMI",
                     dueDate = getFormattedDueDay(emiDay),
-                    amount = "${currency.symbol}${String.format("%,.0f", emiAmount)}"
+                    amount = "${currency.symbol}${String.format("%,.0f", emiAmount)}",
+                    onClick = { showEditCommitments = true }
                 )
             }
             if (!hasSip && !hasRent && !hasEmi) {
                 AlertCard(
                     title = "SIP",
                     dueDate = "25 Aug",
-                    amount = "${currency.symbol}6,000"
+                    amount = "${currency.symbol}6,000",
+                    onClick = { showEditCommitments = true }
                 )
                 AlertCard(
                     title = "Rent",
                     dueDate = "31 Aug",
-                    amount = "${currency.symbol}4,000"
+                    amount = "${currency.symbol}4,000",
+                    onClick = { showEditCommitments = true }
                 )
                 AlertCard(
                     title = "Mess",
                     dueDate = "31 Aug",
-                    amount = "${currency.symbol}3,300"
+                    amount = "${currency.symbol}3,300",
+                    onClick = { showEditCommitments = true }
                 )
+            }
+
+            // Trailing '+' Add Card
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
+                modifier = Modifier
+                    .width(140.dp)
+                    .height(110.dp)
+                    .clickable { showEditCommitments = true }
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "Add Commitment",
+                            tint = Color(0xFF00FF66),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "Add".translate(language),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00FF66)
+                        )
+                    }
+                }
             }
         }
 
@@ -1316,7 +1359,151 @@ fun DashboardScreen(
                 }
             )
         }
+
+        if (showEditCommitments) {
+            EditCommitmentDialog(
+                initialSipAmount = sipAmount,
+                initialSipDay = sipDay,
+                initialRentAmount = rentAmount,
+                initialEmiAmount = emiAmount,
+                initialEmiDay = emiDay,
+                language = language,
+                onDismiss = { showEditCommitments = false },
+                onSave = { newSipAmt, newSipDay, newRentAmt, newEmiAmt, newEmiDay ->
+                    viewModel.updateSipAmount(newSipAmt)
+                    viewModel.updateSipDay(newSipDay)
+                    viewModel.updateRentAmount(newRentAmt)
+                    viewModel.updateEmiAmount(newEmiAmt)
+                    viewModel.updateEmiDay(newEmiDay)
+                    showEditCommitments = false
+                }
+            )
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditCommitmentDialog(
+    initialSipAmount: Double,
+    initialSipDay: Int,
+    initialRentAmount: Double,
+    initialEmiAmount: Double,
+    initialEmiDay: Int,
+    language: LanguageType,
+    onDismiss: () -> Unit,
+    onSave: (sipAmount: Double, sipDay: Int, rentAmount: Double, emiAmount: Double, emiDay: Int) -> Unit
+) {
+    var sipInput by remember { mutableStateOf(if (initialSipAmount > 0) initialSipAmount.toString() else "") }
+    var sipDayInput by remember { mutableStateOf(initialSipDay.toString()) }
+    var rentInput by remember { mutableStateOf(if (initialRentAmount > 0) initialRentAmount.toString() else "") }
+    var emiInput by remember { mutableStateOf(if (initialEmiAmount > 0) initialEmiAmount.toString() else "") }
+    var emiDayInput by remember { mutableStateOf(initialEmiDay.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Edit commitments".translate(language),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        sipInput.toDoubleOrNull() ?: 0.0,
+                        sipDayInput.toIntOrNull() ?: 1,
+                        rentInput.toDoubleOrNull() ?: 0.0,
+                        emiInput.toDoubleOrNull() ?: 0.0,
+                        emiDayInput.toIntOrNull() ?: 1
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF66), contentColor = Color.Black),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Save".translate(language), fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+            }
+        },
+        containerColor = Color(0xFF1C1C1E),
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Rent Amount
+                OutlinedTextField(
+                    value = rentInput,
+                    onValueChange = { rentInput = it },
+                    label = { Text("Rent Amount".translate(language)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    )
+                )
+
+                // SIP Amount & Day
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = sipInput,
+                        onValueChange = { sipInput = it },
+                        label = { Text("SIP Amount".translate(language)) },
+                        modifier = Modifier.weight(1.5f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = sipDayInput,
+                        onValueChange = { sipDayInput = it },
+                        label = { Text("SIP Day".translate(language)) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+
+                // EMI Amount & Day
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = emiInput,
+                        onValueChange = { emiInput = it },
+                        label = { Text("EMI Amount".translate(language)) },
+                        modifier = Modifier.weight(1.5f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = emiDayInput,
+                        onValueChange = { emiDayInput = it },
+                        label = { Text("EMI Day".translate(language)) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

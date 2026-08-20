@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.draw.shadow
 
 enum class MainTab(val displayName: String, val icon: ImageVector) {
     DASHBOARD("Home", Icons.Rounded.Home),
@@ -100,71 +101,57 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
 
     Scaffold(
         bottomBar = {
-            val outlineColor = Color(0xFF1F1F1F)
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF070707))
-                    .drawBehind {
-                        drawLine(
-                            color = outlineColor,
-                            start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                            end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-                            strokeWidth = 1.dp.toPx()
-                        )
-                    }
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(Color.Transparent)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
-                visibleTabs.forEach { tab ->
-                    val isSelected = activeTab == tab
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) { activeTab = tab }
-                            .width(72.dp)
-                    ) {
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .background(Color(0xFF00FF66).copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)
-                                    .border(2.dp, Color(0xFF00FF66), androidx.compose.foundation.shape.CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = tab.icon,
-                                    contentDescription = tab.displayName,
-                                    tint = Color(0xFF00FF66),
-                                    modifier = Modifier.size(26.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(elevation = 16.dp, shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF2C2C2E),
+                                    Color(0xFF1C1C1E),
+                                    Color(0xFF121212)
                                 )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = tab.icon,
-                                    contentDescription = tab.displayName,
-                                    tint = Color(0xFF8E8E93),
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = tab.displayName.translate(language),
-                            color = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
-                            fontSize = 10.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            fontFamily = FontFamily.SansSerif
+                            ),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
                         )
+                        .border(1.dp, Color(0xFF2C2C2E), androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    visibleTabs.forEach { tab ->
+                        val isSelected = activeTab == tab
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null
+                                ) { activeTab = tab }
+                                .width(72.dp)
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.displayName,
+                                tint = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = tab.displayName.translate(language),
+                                color = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
+                                fontSize = 10.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
                     }
                 }
             }
