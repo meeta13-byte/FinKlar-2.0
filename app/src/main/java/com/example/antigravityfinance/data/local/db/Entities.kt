@@ -16,14 +16,6 @@ import com.example.antigravityfinance.data.model.WalletTransfer
 
 @Entity(
     tableName = "transactions",
-    foreignKeys = [
-        ForeignKey(
-            entity = WalletEntity::class,
-            parentColumns = ["id"],
-            childColumns = ["walletId"],
-            onDelete = ForeignKey.SET_NULL
-        )
-    ],
     indices = [Index("walletId")]
 )
 data class TransactionEntity(
@@ -48,7 +40,7 @@ data class TransactionEntity(
         category = category,
         notes = notes,
         account = account,
-        status = TransactionStatus.valueOf(status),
+        status = try { TransactionStatus.valueOf(status) } catch (e: Exception) { TransactionStatus.CONFIRMED },
         isIncome = isIncome,
         isRecurring = isRecurring,
         detectedFromSms = detectedFromSms,
@@ -86,7 +78,7 @@ data class BudgetEntity(
         id = id,
         category = category,
         limitAmount = limitAmount,
-        period = BudgetPeriod.valueOf(period),
+        period = try { BudgetPeriod.valueOf(period) } catch (e: Exception) { BudgetPeriod.MONTHLY },
         spentAmount = spentAmount
     )
 

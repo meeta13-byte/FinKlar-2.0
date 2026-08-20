@@ -3,8 +3,10 @@ package com.example.antigravityfinance
 import com.example.antigravityfinance.data.local.db.*
 import com.example.antigravityfinance.data.model.*
 import com.example.antigravityfinance.data.repository.WalletRepository
+import com.example.antigravityfinance.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -104,9 +106,18 @@ class WalletTest {
             list.add(transaction)
             return transaction.id.toLong()
         }
-        override suspend fun update(transaction: TransactionEntity) {}
-        override suspend fun delete(transaction: TransactionEntity) {}
-        override suspend fun deleteAllTransactions() {}
+        override suspend fun update(transaction: TransactionEntity) {
+            val idx = list.indexOfFirst { it.id == transaction.id }
+            if (idx >= 0) {
+                list[idx] = transaction
+            }
+        }
+        override suspend fun delete(transaction: TransactionEntity) {
+            list.removeIf { it.id == transaction.id }
+        }
+        override suspend fun deleteAllTransactions() {
+            list.clear()
+        }
         override fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>> = flow { emit(list.filter { it.walletId == walletId }) }
     }
 
@@ -222,21 +233,82 @@ class WalletTest {
         val legacyTx = listOf(
             Transaction(id = 10, amount = 150.0, merchant = "M1", date = 0, category = "Food", walletId = null),
             Transaction(id = 11, amount = 200.0, merchant = "M2", date = 0, category = "Travel", walletId = null),
-            Transaction(id = 12, amount = 50.0, merchant = "M3", date = 0, category = "Shopping", walletId = 2) // Already assigned
+            Transaction(id = 12, amount = 50.0, merchant = "M3", date = 0, category = "Shopping", walletId = 2)
         )
 
-        // Simulate MIGRATION_3_4 update logic: "UPDATE transactions SET walletId = 1 WHERE walletId IS NULL"
+        // Verifying that under version 4 updates, we DO NOT backfill legacy transactions to default wallet (leaving them null/unallocated)
         val migratedTx = legacyTx.map { tx ->
-            if (tx.walletId == null) {
-                tx.copy(walletId = 1)
-            } else {
-                tx
-            }
+            tx
         }
 
-        // Verify backfill correctness
-        assertEquals(1, migratedTx[0].walletId)
-        assertEquals(1, migratedTx[1].walletId)
+        assertNull(migratedTx[0].walletId)
+        assertNull(migratedTx[1].walletId)
         assertEquals(2, migratedTx[2].walletId)
+    }
+
+    @Test
+    fun testWalletSortingOrder() = runBlocking {
+        val walletDao = FakeWalletDao()
+        val transferDao = FakeWalletTransferDao()
+        val transactionDao = FakeTransactionDao()
+        val repository = WalletRepository(walletDao, transferDao, transactionDao)
+
+        // Seed out-of-order wallets
+        walletDao.insert(WalletEntity(id = 2, name = "A", balance = 0.0, purpose = null, isDefault = false, createdAt = 1))
+        walletDao.insert(WalletEntity(id = 1, name = "B", balance = 0.0, purpose = null, isDefault = true, createdAt = 2))
+        walletDao.insert(WalletEntity(id = 3, name = "C", balance = 0.0, purpose = null, isDefault = false, createdAt = 3))
+
+        // Get sorted wallets list
+        val sorted = repository.allWallets.first()
+        // Verify default is first
+        assertTrue(sorted[0].isDefault)
+        assertEquals(1, sorted[0].id)
+        assertEquals(2, sorted[1].id)
+        assertEquals(3, sorted[2].id)
+    }
+
+    @Test
+    fun testShiftTransactionWallet() = runBlocking {
+        val walletDao = FakeWalletDao()
+        val transactionDao = FakeTransactionDao()
+        val budgetDao = object : BudgetDao {
+            val budgets = mutableListOf<BudgetEntity>()
+            override fun getAllBudgets(): Flow<List<BudgetEntity>> = flow { emit(budgets) }
+            override suspend fun getBudgetByCategory(category: String): BudgetEntity? = budgets.find { it.category == category }
+            override suspend fun insert(budget: BudgetEntity): Long { budgets.add(budget); return budget.id.toLong() }
+            override suspend fun update(budget: BudgetEntity) {
+                val idx = budgets.indexOfFirst { it.id == budget.id }
+                if (idx >= 0) budgets[idx] = budget
+            }
+            override suspend fun delete(budget: BudgetEntity) {}
+        }
+        val recurringMerchantDao = object : RecurringMerchantDao {
+            override suspend fun getAllRecurringMerchants(): List<RecurringMerchantEntity> = emptyList()
+            override suspend fun getRecurringMerchant(merchant: String): RecurringMerchantEntity? = null
+            override suspend fun insert(recurringMerchant: RecurringMerchantEntity) {}
+        }
+        val repo = TransactionRepository(transactionDao, recurringMerchantDao, budgetDao, walletDao)
+
+        // Set up wallets
+        val w1Id = walletDao.insert(WalletEntity(id = 1, name = "Wallet 1", balance = 500.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
+        val w2Id = walletDao.insert(WalletEntity(id = 2, name = "Wallet 2", balance = 1000.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
+
+        // Set up transaction belonging to Wallet 1 (amount = 100.0, expense/debit, confirmed)
+        val txId = transactionDao.insert(TransactionEntity(id = 10, amount = 100.0, merchant = "M", date = 0, category = "Food", isIncome = false, status = "CONFIRMED", walletId = w1Id)).toInt()
+
+        // Shift transaction from Wallet 1 to Wallet 2
+        repo.shiftTransactionWallet(txId, w2Id)
+
+        // Verify transaction wallet is updated
+        val updatedTx = transactionDao.getTransactionById(txId)
+        assertEquals(w2Id, updatedTx!!.walletId)
+
+        // Verify balances shifted:
+        // Wallet 1 should get +100 back (since debit was removed) = 600.0
+        // Wallet 2 should get -100 (since debit was added) = 900.0
+        val w1Updated = walletDao.getWalletById(w1Id)
+        val w2Updated = walletDao.getWalletById(w2Id)
+        assertEquals(600.0, w1Updated!!.balance, 0.0)
+        assertEquals(900.0, w2Updated!!.balance, 0.0)
     }
 }

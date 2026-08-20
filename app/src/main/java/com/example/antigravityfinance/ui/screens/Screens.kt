@@ -1998,14 +1998,19 @@ fun TransactionsScreen(
             }
         )
     }
-
     if (selectedTxForDetails != null) {
         TransactionDetailsDialog(
             tx = selectedTxForDetails!!,
             currencySymbol = currency.symbol,
+            walletsList = walletsList,
+            language = language,
             onDismiss = { selectedTxForDetails = null },
             onUpdateCategory = { newCat ->
                 viewModel.updateTransactionCategory(selectedTxForDetails!!.id, newCat)
+                selectedTxForDetails = null
+            },
+            onUpdateWallet = { targetWalletId ->
+                viewModel.shiftTransactionWallet(selectedTxForDetails!!.id, targetWalletId)
                 selectedTxForDetails = null
             },
             onConfirm = { 
@@ -2166,8 +2171,11 @@ fun TransactionRow(
 fun TransactionDetailsDialog(
     tx: Transaction,
     currencySymbol: String,
+    walletsList: List<Wallet>,
+    language: LanguageType,
     onDismiss: () -> Unit,
     onUpdateCategory: (String) -> Unit,
+    onUpdateWallet: (Int?) -> Unit,
     onConfirm: (() -> Unit)? = null,
     onReject: (() -> Unit)? = null
 ) {
@@ -2195,7 +2203,7 @@ fun TransactionDetailsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Transaction Details",
+                        text = "Transaction Details".translate(language),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -2211,7 +2219,7 @@ fun TransactionDetailsDialog(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (tx.isIncome) "Income" else "Expense",
+                        text = if (tx.isIncome) "Income".translate(language) else "Expense".translate(language),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2224,13 +2232,75 @@ fun TransactionDetailsDialog(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                DetailRow(label = "Date", value = dateStr, icon = Icons.Rounded.Event)
-                DetailRow(label = "Time", value = timeStr, icon = Icons.Rounded.Schedule)
-                DetailRow(label = "From", value = tx.account, icon = Icons.Rounded.CreditCard)
-                DetailRow(label = "To", value = tx.merchant, icon = Icons.Rounded.Storefront)
+                DetailRow(label = "Date".translate(language), value = dateStr, icon = Icons.Rounded.Event)
+                DetailRow(label = "Time".translate(language), value = timeStr, icon = Icons.Rounded.Schedule)
+                DetailRow(label = "From".translate(language), value = tx.account.translate(language), icon = Icons.Rounded.CreditCard)
+                DetailRow(label = "To".translate(language), value = tx.merchant, icon = Icons.Rounded.Storefront)
                 
                 if (tx.notes.isNotEmpty()) {
-                    DetailRow(label = "Notes", value = tx.notes, icon = Icons.Rounded.Notes)
+                    DetailRow(label = "Notes".translate(language), value = tx.notes, icon = Icons.Rounded.Notes)
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Text(
+                    text = "Assign/Shift Wallet".translate(language),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                var walletExpanded by remember { mutableStateOf(false) }
+                val currentWallet = walletsList.find { it.id == tx.walletId }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { walletExpanded = true }
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = currentWallet?.name ?: "None (Unallocated)".translate(language),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = walletExpanded,
+                    onDismissRequest = { walletExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("None (Unallocated)".translate(language)) },
+                        onClick = {
+                            onUpdateWallet(null)
+                            walletExpanded = false
+                        }
+                    )
+                    walletsList.forEach { wallet ->
+                        DropdownMenuItem(
+                            text = { Text(wallet.name) },
+                            onClick = {
+                                onUpdateWallet(wallet.id)
+                                walletExpanded = false
+                            }
+                        )
+                    }
                 }
 
                 if (tx.status == TransactionStatus.PENDING && onConfirm != null && onReject != null) {
@@ -2247,7 +2317,7 @@ fun TransactionDetailsDialog(
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Confirm")
+                            Text("Confirm".translate(language))
                         }
                         OutlinedButton(
                             onClick = onReject,
@@ -2258,7 +2328,7 @@ fun TransactionDetailsDialog(
                         ) {
                             Icon(Icons.Default.Close, contentDescription = null)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Reject")
+                            Text("Reject".translate(language))
                         }
                     }
                 }
@@ -2267,7 +2337,7 @@ fun TransactionDetailsDialog(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     
                     Text(
-                        text = "Recategorize Transaction",
+                        text = "Recategorize Transaction".translate(language),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -2282,7 +2352,7 @@ fun TransactionDetailsDialog(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { onUpdateCategory(cat.name) },
-                                label = { Text(cat.displayName) },
+                                label = { Text(cat.displayName.translate(language)) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = getCategoryColor(cat.name).copy(alpha = 0.2f),
                                     selectedLabelColor = getCategoryColor(cat.name),
@@ -3546,6 +3616,14 @@ fun SettingsScreen(
     var showPinSetDialog by remember { mutableStateOf(false) }
     val isPinSet by viewModel.isPinSet.collectAsState()
  
+    var geminiInput by remember { mutableStateOf(geminiApiKey) }
+    var sarvamInput by remember { mutableStateOf(sarvamKey) }
+
+    LaunchedEffect(geminiApiKey, sarvamKey) {
+        geminiInput = geminiApiKey
+        sarvamInput = sarvamKey
+    }
+ 
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -3632,6 +3710,38 @@ fun SettingsScreen(
                 checked = isInvestmentsEnabled,
                 onCheckedChange = { viewModel.updateInvestmentsEnabled(it) }
             )
+        }
+
+        Divider()
+
+        Text("API Keys Configuration".translate(language), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+
+        OutlinedTextField(
+            value = geminiInput,
+            onValueChange = { geminiInput = it },
+            label = { Text("Gemini API Key".translate(language)) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        OutlinedTextField(
+            value = sarvamInput,
+            onValueChange = { sarvamInput = it },
+            label = { Text("Sarvam API Key".translate(language)) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Button(
+            onClick = {
+                viewModel.updateGeminiApiKey(geminiInput.trim())
+                viewModel.updateSarvamKey(sarvamInput.trim())
+                android.widget.Toast.makeText(context, "API Keys updated successfully!".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.align(Alignment.End),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Save API Keys".translate(language))
         }
 
         Divider()

@@ -372,6 +372,27 @@ fun WalletDetailScreen(
                     }
                 },
                 actions = {
+                    if (!wallet.isDefault) {
+                        IconButton(
+                            onClick = {
+                                viewModel.setDefaultWallet(wallet.id)
+                                android.widget.Toast.makeText(context, "${wallet.name} set as default wallet", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.StarBorder,
+                                contentDescription = "Set as Default",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Default Wallet",
+                            tint = AccentOrange,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                     IconButton(onClick = { showEditDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit")
                     }

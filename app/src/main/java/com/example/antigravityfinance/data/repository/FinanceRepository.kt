@@ -25,17 +25,17 @@ class TransactionRepository(
         return transactionDao.getTransactionById(id)?.toDomain()
     }
 
-    private suspend fun adjustWalletBalance(walletId: Int?, amount: Double, isIncome: Boolean, isAddition: Boolean) {
+    private suspend fun adjustWalletBalance(walletId: Int?) {
         val targetId = walletId ?: walletDao.getDefaultWallet()?.id ?: return
         val wallet = walletDao.getWalletById(targetId) ?: return
         
-        val delta = if (isIncome) {
-            if (isAddition) amount else -amount
-        } else {
-            if (isAddition) -amount else amount
-        }
+        val income = walletDao.getIncomeSum(targetId) ?: 0.0
+        val expense = walletDao.getExpenseSum(targetId) ?: 0.0
+        val transfersIn = walletDao.getTransfersInSum(targetId) ?: 0.0
+        val transfersOut = walletDao.getTransfersOutSum(targetId) ?: 0.0
+        val computedBalance = income - expense + transfersIn - transfersOut
         
-        walletDao.update(wallet.copy(balance = wallet.balance + delta))
+        walletDao.update(wallet.copy(balance = computedBalance))
     }
 
     suspend fun insertTransaction(transaction: Transaction): Int {
@@ -48,7 +48,7 @@ class TransactionRepository(
         if (finalTransaction.status == TransactionStatus.CONFIRMED) {
             updateBudgetsForTransaction(finalTransaction.category, finalTransaction.amount, isIncome = finalTransaction.isIncome)
             learnRecurringMerchant(finalTransaction.merchant, finalTransaction.amount)
-            adjustWalletBalance(targetWalletId, finalTransaction.amount, finalTransaction.isIncome, isAddition = true)
+            adjustWalletBalance(targetWalletId)
         }
         return id
     }
@@ -57,7 +57,7 @@ class TransactionRepository(
         transactionDao.delete(TransactionEntity.fromDomain(transaction))
         if (transaction.status == TransactionStatus.CONFIRMED) {
             updateBudgetsForTransaction(transaction.category, -transaction.amount, isIncome = transaction.isIncome)
-            adjustWalletBalance(transaction.walletId, transaction.amount, transaction.isIncome, isAddition = false)
+            adjustWalletBalance(transaction.walletId)
         }
     }
 
@@ -74,13 +74,14 @@ class TransactionRepository(
     suspend fun confirmTransaction(id: Int) {
         val entity = transactionDao.getTransactionById(id)
         if (entity != null && entity.status != "CONFIRMED") {
-            val updated = entity.copy(status = "CONFIRMED")
+            val resolvedWalletId = entity.walletId ?: walletDao.getDefaultWallet()?.id
+            val updated = entity.copy(status = "CONFIRMED", walletId = resolvedWalletId)
             transactionDao.update(updated)
             
             val domain = updated.toDomain()
             updateBudgetsForTransaction(domain.category, domain.amount, isIncome = domain.isIncome)
             learnRecurringMerchant(domain.merchant, domain.amount)
-            adjustWalletBalance(domain.walletId, domain.amount, domain.isIncome, isAddition = true)
+            adjustWalletBalance(resolvedWalletId)
         }
     }
 
@@ -95,7 +96,7 @@ class TransactionRepository(
                 // Deduct from budgets and wallet
                 val domain = entity.toDomain()
                 updateBudgetsForTransaction(domain.category, -domain.amount, isIncome = domain.isIncome)
-                adjustWalletBalance(domain.walletId, domain.amount, domain.isIncome, isAddition = false)
+                adjustWalletBalance(entity.walletId)
             }
         }
     }
@@ -103,12 +104,13 @@ class TransactionRepository(
     suspend fun restoreTransaction(id: Int) {
         val entity = transactionDao.getTransactionById(id)
         if (entity != null && entity.status == "CANCELLED") {
-            val updated = entity.copy(status = "CONFIRMED")
+            val resolvedWalletId = entity.walletId ?: walletDao.getDefaultWallet()?.id
+            val updated = entity.copy(status = "CONFIRMED", walletId = resolvedWalletId)
             transactionDao.update(updated)
             
             val domain = updated.toDomain()
             updateBudgetsForTransaction(domain.category, domain.amount, isIncome = domain.isIncome)
-            adjustWalletBalance(domain.walletId, domain.amount, domain.isIncome, isAddition = true)
+            adjustWalletBalance(resolvedWalletId)
         }
     }
 
@@ -188,6 +190,24 @@ class TransactionRepository(
         val allBudget = budgetDao.getBudgetByCategory("All")
         if (allBudget != null) {
             budgetDao.update(allBudget.copy(spentAmount = allBudget.spentAmount + amount))
+        }
+    }
+
+    suspend fun shiftTransactionWallet(transactionId: Int, targetWalletId: Int?) {
+        val entity = transactionDao.getTransactionById(transactionId) ?: return
+        val oldWalletId = entity.walletId
+        if (oldWalletId == targetWalletId) return
+        
+        val updated = entity.copy(walletId = targetWalletId)
+        transactionDao.update(updated)
+        
+        if (entity.status == "CONFIRMED") {
+            if (oldWalletId != null) {
+                adjustWalletBalance(oldWalletId)
+            }
+            if (targetWalletId != null) {
+                adjustWalletBalance(targetWalletId)
+            }
         }
     }
 }

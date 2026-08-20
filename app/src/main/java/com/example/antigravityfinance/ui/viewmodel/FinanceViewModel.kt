@@ -380,12 +380,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             walletRepository.allWallets.first().let { current ->
                 if (current.isEmpty()) {
                     val now = System.currentTimeMillis()
-                    walletRepository.insertWallet(Wallet(name = "Default Spending Wallet", balance = 11500.0, purpose = "Default spending wallet", isDefault = true, createdAt = now, investedAmount = 0.0, initialAmount = 11500.0))
-                    walletRepository.insertWallet(Wallet(name = "Personal Savings", balance = 27844.0, purpose = "Personal savings", isDefault = false, createdAt = now + 1, investedAmount = 9968.0, initialAmount = 27844.0))
+                    walletRepository.insertWallet(Wallet(name = "Default Spending Wallet", balance = 0.0, purpose = "Default spending wallet", isDefault = true, createdAt = now, investedAmount = 0.0, initialAmount = 11500.0))
+                    walletRepository.insertWallet(Wallet(name = "Personal Savings", balance = 0.0, purpose = "Personal savings", isDefault = false, createdAt = now + 1, investedAmount = 9968.0, initialAmount = 27844.0))
                     walletRepository.insertWallet(Wallet(name = "Monthly Living", balance = 0.0, purpose = "Monthly living expenses", isDefault = false, createdAt = now + 2, investedAmount = 0.0, initialAmount = 0.0))
-                    walletRepository.insertWallet(Wallet(name = "Investments", balance = 9968.0, purpose = "Invested savings", isDefault = false, createdAt = now + 3, investedAmount = 0.0, initialAmount = 9968.0))
+                    walletRepository.insertWallet(Wallet(name = "Investments", balance = 0.0, purpose = "Invested savings", isDefault = false, createdAt = now + 3, investedAmount = 0.0, initialAmount = 9968.0))
                     walletRepository.insertWallet(Wallet(name = "Future Expenses", balance = 0.0, purpose = "Future planned expenses", isDefault = false, createdAt = now + 4, investedAmount = 0.0, initialAmount = 0.0))
-                    walletRepository.insertWallet(Wallet(name = "Money Receivable", balance = 1800.0, purpose = "Lent out money (asset)", isDefault = false, createdAt = now + 5, investedAmount = 0.0, initialAmount = 1800.0))
+                    walletRepository.insertWallet(Wallet(name = "Money Receivable", balance = 0.0, purpose = "Lent out money (asset)", isDefault = false, createdAt = now + 5, investedAmount = 0.0, initialAmount = 1800.0))
                 }
             }
 
@@ -625,6 +625,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun shiftTransactionWallet(transactionId: Int, targetWalletId: Int?) {
+        viewModelScope.launch {
+            transactionRepository.shiftTransactionWallet(transactionId, targetWalletId)
+        }
+    }
+
     fun addManualTransaction(amount: Double, merchant: String, isIncome: Boolean, category: String, walletId: Int? = null) {
         viewModelScope.launch {
             val newTx = Transaction(
@@ -784,8 +790,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        System.err.println("Sarvam API error: ${response.code} ${response.message}")
+                        val errMsg = "Sarvam API error: ${response.code} ${response.message}"
+                        System.err.println(errMsg)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            android.widget.Toast.makeText(getApplication(), errMsg, android.widget.Toast.LENGTH_LONG).show()
                             callback(null)
                         }
                         return@launch
@@ -800,7 +808,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                val errMsg = "Voice translation connection failed: ${e.localizedMessage}"
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(getApplication(), errMsg, android.widget.Toast.LENGTH_LONG).show()
                     callback(null)
                 }
             }
@@ -813,7 +823,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         var amount = 0.0
         val match = amountRegex.find(lowercase)
         if (match != null) {
-            amount = match.groupValues[1].toDoubleOrNull() ?: match.groupValues[2].toDoubleOrNull() ?: 0.0
+            val val1 = match.groupValues.getOrNull(1)?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+            val val2 = match.groupValues.getOrNull(2)?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+            amount = val1 ?: val2 ?: 0.0
         }
         
         var isIncome = lowercase.contains("received") || lowercase.contains("salary") || lowercase.contains("credited")
@@ -1087,7 +1099,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val walletId = walletRepository.insertWallet(
                 Wallet(
                     name = name,
-                    balance = initialAmount,
+                    balance = 0.0,
                     purpose = purpose,
                     isDefault = isDefault,
                     createdAt = System.currentTimeMillis(),

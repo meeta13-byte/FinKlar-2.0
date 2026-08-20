@@ -53,8 +53,8 @@ abstract class FinanceDatabase : RoomDatabase() {
                         `purpose` TEXT,
                         `isDefault` INTEGER NOT NULL,
                         `createdAt` INTEGER NOT NULL,
-                        `investedAmount` REAL NOT NULL DEFAULT 0.0,
-                        `initialAmount` REAL NOT NULL DEFAULT 0.0
+                        `investedAmount` REAL NOT NULL,
+                        `initialAmount` REAL NOT NULL
                     )
                 """.trimIndent())
 
@@ -71,17 +71,14 @@ abstract class FinanceDatabase : RoomDatabase() {
                 """.trimIndent())
 
                 // Add walletId column to transactions
-                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `walletId` INTEGER REFERENCES `wallets`(`id`) ON DELETE SET NULL")
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `walletId` INTEGER DEFAULT NULL")
 
                 // Create index on walletId in transactions
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_walletId` ON `transactions` (`walletId`)")
 
                 // Seed the Default Spending Wallet
                 val now = System.currentTimeMillis()
-                db.execSQL("INSERT INTO `wallets` (`name`, `balance`, `purpose`, `isDefault`, `createdAt`, `investedAmount`) VALUES ('Default Spending Wallet', 0.0, 'Default spending wallet', 1, $now, 0.0)")
-
-                // Backfill existing transactions with the default wallet's id (which is 1)
-                db.execSQL("UPDATE `transactions` SET `walletId` = 1 WHERE `walletId` IS NULL")
+                db.execSQL("INSERT INTO `wallets` (`id`, `name`, `balance`, `purpose`, `isDefault`, `createdAt`, `investedAmount`, `initialAmount`) VALUES (1, 'Default Spending Wallet', 0.0, 'Default spending wallet', 1, $now, 0.0, 11500.0)")
             }
         }
 

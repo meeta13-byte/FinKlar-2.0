@@ -13,7 +13,7 @@ class WalletRepository(
     private val db: FinanceDatabase? = null
 ) {
     val allWallets: Flow<List<Wallet>> = walletDao.getAllWallets().map { list ->
-        list.map { it.toDomain() }
+        list.map { it.toDomain() }.sortedWith(compareByDescending<Wallet> { it.isDefault }.thenBy { it.id })
     }
 
     val allTransfers: Flow<List<WalletTransfer>> = walletTransferDao.getAllTransfers().map { list ->
@@ -106,9 +106,6 @@ class WalletRepository(
                 throw IllegalArgumentException("Insufficient funds in source wallet")
             }
 
-            walletDao.update(fromWallet.copy(balance = fromWallet.balance - amount))
-            walletDao.update(toWallet.copy(balance = toWallet.balance + amount))
-            
             walletTransferDao.insert(
                 WalletTransferEntity(
                     fromWalletId = fromWalletId,
@@ -118,6 +115,12 @@ class WalletRepository(
                     timestamp = System.currentTimeMillis()
                 )
             )
+
+            val newFromBalance = recomputeWalletBalance(fromWalletId)
+            val newToBalance = recomputeWalletBalance(toWalletId)
+
+            walletDao.update(fromWallet.copy(balance = newFromBalance))
+            walletDao.update(toWallet.copy(balance = newToBalance))
         }
         if (db != null) {
             db.withTransaction { block() }
