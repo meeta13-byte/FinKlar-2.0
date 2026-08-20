@@ -27,13 +27,16 @@ import com.example.antigravityfinance.ui.components.PinKeyboardGate
 import com.example.antigravityfinance.ui.screens.*
 import com.example.antigravityfinance.ui.viewmodel.FinanceViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.font.FontFamily
 
 enum class MainTab(val displayName: String, val icon: ImageVector) {
-    DASHBOARD("Dashboard", Icons.Rounded.Dashboard),
-    TRANSACTIONS("Transactions", Icons.Rounded.ReceiptLong),
-    ASSISTANT("AI Chat", Icons.Rounded.AutoAwesome),
-    FINANCIAL_TOOLS("Financial Tools", Icons.Rounded.Widgets),
-    SETTINGS("Settings", Icons.Rounded.Settings)
+    DASHBOARD("Home", Icons.Rounded.Home),
+    TRANSACTIONS("Transaction", Icons.Rounded.ReceiptLong),
+    ASSISTANT("AI Chat", Icons.Rounded.Android),
+    FINANCIAL_TOOLS("Progress", Icons.Rounded.BarChart),
+    SETTINGS("Profile", Icons.Rounded.Person)
 }
 
 @Composable
@@ -97,33 +100,72 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
 
     Scaffold(
         bottomBar = {
-            val outlineColor = MaterialTheme.colorScheme.outlineVariant
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                modifier = androidx.compose.ui.Modifier.drawBehind {
-                    drawLine(
-                        color = outlineColor,
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
+            val outlineColor = Color(0xFF1F1F1F)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF070707))
+                    .drawBehind {
+                        drawLine(
+                            color = outlineColor,
+                            start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                            end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 visibleTabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = activeTab == tab,
-                        onClick = { activeTab = tab },
-                        icon = { Icon(tab.icon, contentDescription = tab.displayName) },
-                        label = { Text(tab.displayName.translate(language), fontSize = 10.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    val isSelected = activeTab == tab
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { activeTab = tab }
+                            .width(72.dp)
+                    ) {
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .background(Color(0xFF00FF66).copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)
+                                    .border(2.dp, Color(0xFF00FF66), androidx.compose.foundation.shape.CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.displayName,
+                                    tint = Color(0xFF00FF66),
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.displayName,
+                                    tint = Color(0xFF8E8E93),
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = tab.displayName.translate(language),
+                            color = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontFamily = FontFamily.SansSerif
                         )
-                    )
+                    }
                 }
             }
         }

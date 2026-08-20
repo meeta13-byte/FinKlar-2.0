@@ -731,6 +731,245 @@ fun SipAlertCard(
 
 // --- DASHBOARD SCREEN ---
 @Composable
+fun ProgressRingCard(
+    percent: Int,
+    amountText: String,
+    creditAmount: String,
+    debitAmount: String,
+    currencySymbol: String,
+    onCreditClick: () -> Unit,
+    onDebitClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: Progress Ring
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(130.dp)
+            ) {
+                CircularProgressIndicator(
+                    progress = percent / 100f,
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color(0xFF00FF66),
+                    trackColor = Color(0xFF1F1F1F),
+                    strokeWidth = 10.dp,
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$percent%",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Amount left",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8E8E93)
+                    )
+                    Text(
+                        text = amountText,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(20.dp))
+
+            // Right: Credit/Debit Info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCreditClick() },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(Color(0xFF00FF66), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Credit", color = Color(0xFF8E8E93), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(creditAmount, color = Color.White, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                }
+
+                HorizontalDivider(color = Color(0xFF1F1F1F))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDebitClick() },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(Color(0xFFFF3B30), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Debit", color = Color(0xFF8E8E93), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(debitAmount, color = Color.White, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AlertCard(
+    title: String,
+    dueDate: String,
+    amount: String
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        modifier = Modifier
+            .width(140.dp)
+            .height(110.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFF81D4FA).copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.Event,
+                        contentDescription = null,
+                        tint = Color(0xFF81D4FA),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = dueDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8E8E93)
+                    )
+                }
+            }
+            Text(
+                text = amount,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF81D4FA)
+            )
+        }
+    }
+}
+
+@Composable
+fun WalletBalanceCard(
+    walletName: String,
+    balance: String,
+    spent: String,
+    remaining: String,
+    currencySymbol: String,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = walletName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+                Text(
+                    text = balance,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF81D4FA)
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Spent: $spent",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8E8E93)
+                    )
+                    Text(
+                        text = "Rem: $remaining",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF00FF66)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Color(0xFF2C2C2E), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = Color(0xFF8E8E93),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+fun getFormattedDueDay(day: Int): String {
+    val cal = java.util.Calendar.getInstance()
+    if (cal.get(java.util.Calendar.DAY_OF_MONTH) > day) {
+        cal.add(java.util.Calendar.MONTH, 1)
+    }
+    val sdf = java.text.SimpleDateFormat("dd MMM", java.util.Locale.getDefault())
+    cal.set(java.util.Calendar.DAY_OF_MONTH, day)
+    return sdf.format(cal.time)
+}
+
+@Composable
 fun DashboardScreen(
     viewModel: FinanceViewModel,
     modifier: Modifier = Modifier
@@ -748,6 +987,7 @@ fun DashboardScreen(
     val emiDay by viewModel.emiDay.collectAsState()
     val sipAmount by viewModel.sipAmount.collectAsState()
     val sipDay by viewModel.sipDay.collectAsState()
+    val rentAmount by viewModel.rentAmount.collectAsState()
 
     var showCreditDialog by remember { mutableStateOf(false) }
     var showDebitDialog by remember { mutableStateOf(false) }
@@ -780,16 +1020,27 @@ fun DashboardScreen(
     val debitSum = confirmedTx.filter { !it.isIncome }.sumOf { it.amount }
     val netBalance = creditSum - debitSum
 
-    val categoryTotals = confirmedTx.filter { !it.isIncome }
-        .groupBy { it.category }
-        .map { (cat, list) ->
-            val sum = list.sumOf { it.amount }
-            PieChartInput(
-                color = getCategoryColor(cat),
-                value = sum,
-                description = TransactionCategory.values().find { it.name == cat }?.displayName ?: cat
-            )
-        }.filter { it.value > 0 }
+    val defaultWallet = wallets.find { it.isDefault }
+    val percent = remember(defaultWallet, creditSum, debitSum) {
+        if (defaultWallet != null && defaultWallet.initialAmount > 0.0) {
+            val spent = transactions.filter { it.walletId == defaultWallet.id && it.status == com.example.antigravityfinance.data.model.TransactionStatus.CONFIRMED && !it.isIncome }.sumOf { it.amount }
+            val remaining = defaultWallet.initialAmount - spent
+            ((remaining / defaultWallet.initialAmount) * 100).coerceIn(0.0, 100.0).toInt()
+        } else {
+            if (creditSum > 0.0) {
+                (((creditSum - debitSum) / creditSum) * 100).coerceIn(0.0, 100.0).toInt()
+            } else {
+                100
+            }
+        }
+    }
+    val amountText = remember(defaultWallet, netBalance) {
+        if (defaultWallet != null) {
+            "${currency.symbol}${String.format("%,.0f", defaultWallet.balance)}"
+        } else {
+            "${currency.symbol}${String.format("%,.0f", netBalance)}"
+        }
+    }
 
     val now = remember { java.util.Calendar.getInstance() }
     val greeting = remember {
@@ -806,9 +1057,9 @@ fun DashboardScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // ── Header ────────────────────────────────────────────────────────
+        // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -818,244 +1069,168 @@ fun DashboardScreen(
                 Text(
                     text = greeting.translate(language),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFF8E8E93)
                 )
                 Text(
                     text = userName.ifBlank { "FinKlar 2.0" },
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                    color = Color.White
                 )
             }
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                    .background(Color(0xFF1C1C1E), CircleShape)
                     .clickable { showPrivacyDialog = true },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Rounded.HelpOutline,
                     contentDescription = "Privacy Policy",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = Color.White,
                     modifier = Modifier.size(22.dp)
                 )
             }
         }
 
-        if (smsSyncedBalance != null && totalSipAmount > 0.0 && smsSyncedBalance!! < totalSipAmount) {
-            SipAlertCard(
-                smsSyncedBalance = smsSyncedBalance!!,
-                totalSipAmount = totalSipAmount,
-                currencySymbol = currency.symbol
-            )
-        }
+        // Progress ring overview card
+        ProgressRingCard(
+            percent = percent,
+            amountText = amountText,
+            creditAmount = "${currency.symbol}${String.format("%,.0f", creditSum)}",
+            debitAmount = "${currency.symbol}${String.format("%,.0f", debitSum)}",
+            currencySymbol = currency.symbol,
+            onCreditClick = { showCreditDialog = true },
+            onDebitClick = { showDebitDialog = true }
+        )
 
-        // ── Net Balance card ──────────────────────────────────────────────────
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f)
-                            )
-                        ),
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .padding(24.dp)
-            ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Rounded.AccountBalanceWallet,
-                            contentDescription = null,
-                            tint = Color.Black.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Net Balance".translate(language),
-                            color = Color.Black.copy(alpha = 0.7f),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${currency.symbol}${String.format("%,.2f", netBalance)}",
-                        color = Color.Black,
-                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.ExtraBold)
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    // Credit / Debit stat row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Credit chip
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { showCreditDialog = true }
-                                .background(Color.White.copy(alpha = 0.45f))
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                        ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .background(Color(0xFF34A853), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                    }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Credit", color = Color.Black.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${currency.symbol}${String.format("%,.0f", creditSum)}",
-                                    color = Color.Black,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        }
-                        // Debit chip
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { showDebitDialog = true }
-                                .background(Color.White.copy(alpha = 0.45f))
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                        ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .background(Color(0xFFEA4335), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.ArrowUpward, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                    }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Debit", color = Color.Black.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${currency.symbol}${String.format("%,.0f", debitSum)}",
-                                    color = Color.Black,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        // Alerts Section
         Text(
-            text = "Wallet Balances".translate(language),
+            text = "Alerts".translate(language),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface
+            color = Color.White
         )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val hasSip = sipAmount > 0.0
+            val hasRent = rentAmount > 0.0
+            val hasEmi = emiAmount > 0.0
+
+            if (hasSip) {
+                AlertCard(
+                    title = "SIP",
+                    dueDate = getFormattedDueDay(sipDay),
+                    amount = "${currency.symbol}${String.format("%,.0f", sipAmount)}"
+                )
+            }
+            if (hasRent) {
+                AlertCard(
+                    title = "Rent",
+                    dueDate = getFormattedDueDay(31),
+                    amount = "${currency.symbol}${String.format("%,.0f", rentAmount)}"
+                )
+            }
+            if (hasEmi) {
+                AlertCard(
+                    title = "EMI",
+                    dueDate = getFormattedDueDay(emiDay),
+                    amount = "${currency.symbol}${String.format("%,.0f", emiAmount)}"
+                )
+            }
+            if (!hasSip && !hasRent && !hasEmi) {
+                AlertCard(
+                    title = "SIP",
+                    dueDate = "25 Aug",
+                    amount = "${currency.symbol}6,000"
+                )
+                AlertCard(
+                    title = "Rent",
+                    dueDate = "31 Aug",
+                    amount = "${currency.symbol}4,000"
+                )
+                AlertCard(
+                    title = "Mess",
+                    dueDate = "31 Aug",
+                    amount = "${currency.symbol}3,300"
+                )
+            }
+        }
+
+        // Wallet Balances Section
+        Text(
+            text = "Wallet Balances".translate(language),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             wallets.forEach { wallet ->
                 val spent = transactions.filter { it.walletId == wallet.id && it.status == com.example.antigravityfinance.data.model.TransactionStatus.CONFIRMED && !it.isIncome }.sumOf { it.amount }
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (wallet.isDefault) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier
-                        .width(180.dp)
-                        .clickable { showWalletDetailId = wallet.id }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = wallet.name,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${currency.symbol}${String.format("%,.0f", wallet.balance)}",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        if (wallet.initialAmount > 0.0) {
-                            val remaining = wallet.initialAmount - spent
-                            Text(
-                                text = "Spent: ${currency.symbol}${String.format("%,.0f", spent)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Rem: ${currency.symbol}${String.format("%,.0f", remaining)}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                fontSize = 10.sp,
-                                color = if (remaining >= 0.0) AccentEmerald else MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
+                val remaining = wallet.initialAmount - spent
+                WalletBalanceCard(
+                    walletName = wallet.name,
+                    balance = "${currency.symbol}${String.format("%,.0f", wallet.balance)}",
+                    spent = "${currency.symbol}${String.format("%,.0f", spent)}",
+                    remaining = "${currency.symbol}${String.format("%,.0f", remaining)}",
+                    currencySymbol = currency.symbol,
+                    onClick = { showWalletDetailId = wallet.id }
+                )
             }
 
-            // "+" Card to add wallet
-            Card(
+            OutlinedButton(
+                onClick = { showAddWalletDialog = true },
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier
-                    .width(100.dp)
-                    .clickable { showAddWalletDialog = true }
+                border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00FF66))
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Wallet".translate(language), fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Recent Transactions Section
+        Text(
+            text = "Recent Transactions".translate(language),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
+        )
+
+        val recentTx = remember(confirmedTx) {
+            confirmedTx.sortedByDescending { it.date }.take(5)
+        }
+
+        if (recentTx.isEmpty()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(vertical = 16.dp)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = "Add Wallet",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Add Wallet".translate(language),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Text("No recent transactions", color = Color(0xFF8E8E93))
                 }
+            }
+        } else {
+            recentTx.forEach { tx ->
+                TransactionRow(
+                    tx = tx,
+                    currency = currency,
+                    onClick = { }
+                )
             }
         }
 
@@ -1087,124 +1262,6 @@ fun DashboardScreen(
                         onBack = { showWalletDetailId = null }
                     )
                 }
-            }
-        }
-
-
-        // ── Upcoming Commitments Card ─────────────────────────────────────────────
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Rounded.Event,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Upcoming Commitments".translate(language),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                val hasEmi = emiAmount > 0.0
-                val hasSip = sipAmount > 0.0
-
-                if (!hasEmi && !hasSip) {
-                    Text(
-                        text = "No EMI or SIP due".translate(language),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    if (hasEmi) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "EMI Payment".translate(language),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "${"Day".translate(language)} $emiDay (${currency.symbol}${String.format("%.2f", emiAmount)})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    if (hasSip) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "SIP Commitment".translate(language),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "${"Day".translate(language)} $sipDay (${currency.symbol}${String.format("%.2f", sipAmount)})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (confirmedTx.isEmpty()) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Rounded.Inbox, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                        Text("No transactions yet", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Tap Scan SMS to import from your bank messages", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        } else {
-            val recentTx = remember(confirmedTx) {
-                confirmedTx.sortedByDescending { it.date }.take(5)
-            }
-
-            Text(
-                text = "Recent Transactions".translate(language),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            recentTx.forEach { tx ->
-                TransactionRow(
-                    tx = tx,
-                    currency = currency,
-                    onClick = { }
-                )
             }
         }
 
@@ -2033,100 +2090,81 @@ fun TransactionRow(
     onConfirm: (() -> Unit)? = null,
     onReject: (() -> Unit)? = null
 ) {
-    val accentColor = if (tx.isIncome) Color(0xFF34A853) else Color(0xFFEA4335)
+    val accentColor = if (tx.isIncome) Color(0xFF00FF66) else Color(0xFFFF3B30)
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
         modifier = Modifier.fillMaxWidth().clickable { onClick() }
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Colored left accent bar
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(
-                        color = if (tx.status == TransactionStatus.PENDING) MaterialTheme.colorScheme.primary
-                                else accentColor,
-                        shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
-                    )
-            )
-        Column(modifier = Modifier.padding(12.dp).weight(1f)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1.5f)
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color(0xFF2C2C2E), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(getCategoryColor(tx.category).copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = getCategoryIcon(tx.category),
-                            contentDescription = null,
-                            tint = getCategoryColor(tx.category),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = tx.merchant,
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (tx.status == TransactionStatus.PENDING) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text("PENDING", fontSize = 9.sp) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                        labelColor = MaterialTheme.colorScheme.error
-                                    ),
-                                    border = null
-                                )
-                            } else if (tx.status == TransactionStatus.CANCELLED) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text("CANCELLED", fontSize = 9.sp) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    ),
-                                    border = null
-                                )
-                            }
-                        }
-                        Text(
-                            text = SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(tx.date)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
+                    Icon(
+                        imageVector = getCategoryIcon(tx.category),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = tx.merchant,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (tx.status == TransactionStatus.PENDING) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text("PENDING", fontSize = 9.sp) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = Color(0xFFFF3B30).copy(alpha = 0.15f),
+                                    labelColor = Color(0xFFFF3B30)
+                                ),
+                                border = null
+                            )
+                        } else if (tx.status == TransactionStatus.CANCELLED) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text("CANCELLED", fontSize = 9.sp) },
+                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                    containerColor = Color(0xFF2C2C2E),
+                                    labelColor = Color(0xFF8E8E93)
+                                ),
+                                border = null
+                            )
+                        }
+                    }
+                    Text(
+                        text = SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(tx.date)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8E8E93)
+                    )
+                }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "${if (tx.isIncome) "+" else "-"}${currency.symbol}${String.format("%,.2f", tx.amount)}",
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                         color = accentColor
                     )
                     Text(
                         text = if (tx.isIncome) "Credit" else "Debit",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accentColor.copy(alpha = 0.7f)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = accentColor
                     )
                 }
             }
@@ -2139,31 +2177,30 @@ fun TransactionRow(
                 ) {
                     Button(
                         onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF66)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Confirm", fontSize = 12.sp)
+                        Text("Confirm", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = onReject,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF3B30)),
+                        border = BorderStroke(1.dp, Color(0xFFFF3B30)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Reject", fontSize = 12.sp)
+                        Text("Ignore", fontSize = 12.sp)
                     }
                 }
             }
         }
-        } // end colored-bar Row
     }
 }
 
