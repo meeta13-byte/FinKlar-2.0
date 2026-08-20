@@ -36,6 +36,7 @@ import com.example.antigravityfinance.service.ocr.OcrScanner
 import com.example.antigravityfinance.theme.*
 import com.example.antigravityfinance.ui.components.*
 import com.example.antigravityfinance.ui.viewmodel.FinanceViewModel
+import com.example.antigravityfinance.ui.viewmodel.CustomCommitment
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -731,6 +732,78 @@ fun SipAlertCard(
 
 // --- DASHBOARD SCREEN ---
 @Composable
+fun GlowingCircularProgressIndicator(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF8AFF6A),
+    trackColor: Color = Color(0xFF1F1F1F),
+    strokeWidth: androidx.compose.ui.unit.Dp = 8.dp
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val sizePx = size.minDimension
+        val strokeWidthPx = strokeWidth.toPx()
+        val radius = (sizePx - strokeWidthPx) / 2f
+        val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+
+        // Draw track
+        drawCircle(
+            color = trackColor,
+            radius = radius,
+            center = centerOffset,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidthPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+
+        val sweepAngle = progress * 360f
+
+        // Wide glow layer: Blur 40px (simulate with stroke width 3.0x, opacity 10%)
+        drawArc(
+            color = color.copy(alpha = 0.10f),
+            startAngle = -90f,
+            sweepAngle = sweepAngle,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(centerOffset.x - radius, centerOffset.y - radius),
+            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidthPx * 3.0f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+
+        // Narrow glow layer: Blur 20px (simulate with stroke width 1.8x, opacity 28%)
+        drawArc(
+            color = color.copy(alpha = 0.28f),
+            startAngle = -90f,
+            sweepAngle = sweepAngle,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(centerOffset.x - radius, centerOffset.y - radius),
+            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidthPx * 1.8f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+
+        // Main active indicator layer
+        drawArc(
+            color = color,
+            startAngle = -90f,
+            sweepAngle = sweepAngle,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(centerOffset.x - radius, centerOffset.y - radius),
+            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = strokeWidthPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+    }
+}
+
+// --- DASHBOARD SCREEN ---
+@Composable
 fun ProgressRingCard(
     percent: Int,
     amountText: String,
@@ -757,13 +830,12 @@ fun ProgressRingCard(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(130.dp)
             ) {
-                CircularProgressIndicator(
+                GlowingCircularProgressIndicator(
                     progress = percent / 100f,
                     modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF00FF66),
+                    color = Color(0xFF8AFF6A),
                     trackColor = Color(0xFF1F1F1F),
-                    strokeWidth = 10.dp,
-                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                    strokeWidth = 8.dp
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -997,6 +1069,8 @@ fun DashboardScreen(
     var showAddWalletDialog by remember { mutableStateOf(false) }
     var showWalletDetailId by remember { mutableStateOf<Int?>(null) }
     var showEditCommitments by remember { mutableStateOf(false) }
+    var selectedCommitment by remember { mutableStateOf<CustomCommitment?>(null) }
+    val customCommitments by viewModel.customCommitments.collectAsState()
 
     val totalSipAmount = remember(investments) {
         investments.filter { it.type == "SIP" }.sumOf { it.investedAmount }
@@ -1120,53 +1194,28 @@ fun DashboardScreen(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val hasSip = sipAmount > 0.0
-            val hasRent = rentAmount > 0.0
-            val hasEmi = emiAmount > 0.0
-
-            if (hasSip) {
+            if (customCommitments.isEmpty()) {
                 AlertCard(
-                    title = "SIP",
-                    dueDate = getFormattedDueDay(sipDay),
-                    amount = "${currency.symbol}${String.format("%,.0f", sipAmount)}",
-                    onClick = { showEditCommitments = true }
+                    title = "Add commitment".translate(language),
+                    dueDate = "No commitments set".translate(language),
+                    amount = "${currency.symbol}0",
+                    onClick = {
+                        selectedCommitment = null
+                        showEditCommitments = true
+                    }
                 )
-            }
-            if (hasRent) {
-                AlertCard(
-                    title = "Rent",
-                    dueDate = getFormattedDueDay(31),
-                    amount = "${currency.symbol}${String.format("%,.0f", rentAmount)}",
-                    onClick = { showEditCommitments = true }
-                )
-            }
-            if (hasEmi) {
-                AlertCard(
-                    title = "EMI",
-                    dueDate = getFormattedDueDay(emiDay),
-                    amount = "${currency.symbol}${String.format("%,.0f", emiAmount)}",
-                    onClick = { showEditCommitments = true }
-                )
-            }
-            if (!hasSip && !hasRent && !hasEmi) {
-                AlertCard(
-                    title = "SIP",
-                    dueDate = "25 Aug",
-                    amount = "${currency.symbol}6,000",
-                    onClick = { showEditCommitments = true }
-                )
-                AlertCard(
-                    title = "Rent",
-                    dueDate = "31 Aug",
-                    amount = "${currency.symbol}4,000",
-                    onClick = { showEditCommitments = true }
-                )
-                AlertCard(
-                    title = "Mess",
-                    dueDate = "31 Aug",
-                    amount = "${currency.symbol}3,300",
-                    onClick = { showEditCommitments = true }
-                )
+            } else {
+                customCommitments.forEach { commitment ->
+                    AlertCard(
+                        title = commitment.notes.ifBlank { "Commitment" },
+                        dueDate = getFormattedDueDay(commitment.day),
+                        amount = "${currency.symbol}${String.format("%,.0f", commitment.amount)}",
+                        onClick = {
+                            selectedCommitment = commitment
+                            showEditCommitments = true
+                        }
+                    )
+                }
             }
 
             // Trailing '+' Add Card
@@ -1177,7 +1226,10 @@ fun DashboardScreen(
                 modifier = Modifier
                     .width(140.dp)
                     .height(110.dp)
-                    .clickable { showEditCommitments = true }
+                    .clickable {
+                        selectedCommitment = null
+                        showEditCommitments = true
+                    }
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -1268,12 +1320,17 @@ fun DashboardScreen(
                 }
             }
         } else {
-            recentTx.forEach { tx ->
-                TransactionRow(
-                    tx = tx,
-                    currency = currency,
-                    onClick = { }
-                )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                recentTx.forEach { tx ->
+                    TransactionRow(
+                        tx = tx,
+                        currency = currency,
+                        onClick = { }
+                    )
+                }
             }
         }
 
@@ -1362,19 +1419,15 @@ fun DashboardScreen(
 
         if (showEditCommitments) {
             EditCommitmentDialog(
-                initialSipAmount = sipAmount,
-                initialSipDay = sipDay,
-                initialRentAmount = rentAmount,
-                initialEmiAmount = emiAmount,
-                initialEmiDay = emiDay,
+                commitment = selectedCommitment,
                 language = language,
                 onDismiss = { showEditCommitments = false },
-                onSave = { newSipAmt, newSipDay, newRentAmt, newEmiAmt, newEmiDay ->
-                    viewModel.updateSipAmount(newSipAmt)
-                    viewModel.updateSipDay(newSipDay)
-                    viewModel.updateRentAmount(newRentAmt)
-                    viewModel.updateEmiAmount(newEmiAmt)
-                    viewModel.updateEmiDay(newEmiDay)
+                onSave = { updated ->
+                    viewModel.addOrUpdateCommitment(updated)
+                    showEditCommitments = false
+                },
+                onDelete = { id ->
+                    viewModel.deleteCommitment(id)
                     showEditCommitments = false
                 }
             )
@@ -1385,26 +1438,21 @@ fun DashboardScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditCommitmentDialog(
-    initialSipAmount: Double,
-    initialSipDay: Int,
-    initialRentAmount: Double,
-    initialEmiAmount: Double,
-    initialEmiDay: Int,
+    commitment: CustomCommitment?,
     language: LanguageType,
     onDismiss: () -> Unit,
-    onSave: (sipAmount: Double, sipDay: Int, rentAmount: Double, emiAmount: Double, emiDay: Int) -> Unit
+    onSave: (CustomCommitment) -> Unit,
+    onDelete: ((String) -> Unit)? = null
 ) {
-    var sipInput by remember { mutableStateOf(if (initialSipAmount > 0) initialSipAmount.toString() else "") }
-    var sipDayInput by remember { mutableStateOf(initialSipDay.toString()) }
-    var rentInput by remember { mutableStateOf(if (initialRentAmount > 0) initialRentAmount.toString() else "") }
-    var emiInput by remember { mutableStateOf(if (initialEmiAmount > 0) initialEmiAmount.toString() else "") }
-    var emiDayInput by remember { mutableStateOf(initialEmiDay.toString()) }
+    var notesInput by remember { mutableStateOf(commitment?.notes ?: "") }
+    var amountInput by remember { mutableStateOf(if (commitment != null && commitment.amount > 0.0) commitment.amount.toInt().toString() else "") }
+    var dayInput by remember { mutableStateOf(commitment?.day?.toString() ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Edit commitments".translate(language),
+                text = if (commitment == null) "Add commitment".translate(language) else "Edit commitment".translate(language),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
@@ -1412,13 +1460,18 @@ fun EditCommitmentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(
-                        sipInput.toDoubleOrNull() ?: 0.0,
-                        sipDayInput.toIntOrNull() ?: 1,
-                        rentInput.toDoubleOrNull() ?: 0.0,
-                        emiInput.toDoubleOrNull() ?: 0.0,
-                        emiDayInput.toIntOrNull() ?: 1
-                    )
+                    val amt = amountInput.toDoubleOrNull() ?: 0.0
+                    val dayVal = dayInput.toIntOrNull()?.coerceIn(1, 31) ?: 1
+                    if (amt > 0.0) {
+                        onSave(
+                            CustomCommitment(
+                                id = commitment?.id ?: java.util.UUID.randomUUID().toString(),
+                                amount = amt,
+                                day = dayVal,
+                                notes = notesInput.trim()
+                            )
+                        )
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF66), contentColor = Color.Black),
                 shape = RoundedCornerShape(12.dp)
@@ -1427,8 +1480,18 @@ fun EditCommitmentDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (commitment != null && onDelete != null) {
+                    TextButton(
+                        onClick = { onDelete(commitment.id) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                    ) {
+                        Text("Delete".translate(language))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+                }
             }
         },
         containerColor = Color(0xFF1C1C1E),
@@ -1437,11 +1500,10 @@ fun EditCommitmentDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Rent Amount
                 OutlinedTextField(
-                    value = rentInput,
-                    onValueChange = { rentInput = it },
-                    label = { Text("Rent Amount".translate(language)) },
+                    value = notesInput,
+                    onValueChange = { notesInput = it },
+                    label = { Text("Name / Notes (Optional)".translate(language)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = TextFieldDefaults.colors(
@@ -1450,57 +1512,29 @@ fun EditCommitmentDialog(
                     )
                 )
 
-                // SIP Amount & Day
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = sipInput,
-                        onValueChange = { sipInput = it },
-                        label = { Text("SIP Amount".translate(language)) },
-                        modifier = Modifier.weight(1.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { amountInput = it },
+                    label = { Text("Amount".translate(language)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
                     )
-                    OutlinedTextField(
-                        value = sipDayInput,
-                        onValueChange = { sipDayInput = it },
-                        label = { Text("SIP Day".translate(language)) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                }
+                )
 
-                // EMI Amount & Day
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = emiInput,
-                        onValueChange = { emiInput = it },
-                        label = { Text("EMI Amount".translate(language)) },
-                        modifier = Modifier.weight(1.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
+                OutlinedTextField(
+                    value = dayInput,
+                    onValueChange = { dayInput = it },
+                    label = { Text("Day of Month (1-31)".translate(language)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
                     )
-                    OutlinedTextField(
-                        value = emiDayInput,
-                        onValueChange = { emiDayInput = it },
-                        label = { Text("EMI Day".translate(language)) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                }
+                )
             }
         }
     )
@@ -3011,6 +3045,7 @@ fun SafeSpendScreen(
     val sipDay by viewModel.sipDay.collectAsState()
     val otherMandatory by viewModel.otherMandatory.collectAsState()
     
+    val customCommitments by viewModel.customCommitments.collectAsState()
     val currency by viewModel.currency.collectAsState()
     val language by viewModel.language.collectAsState()
     val transactions by viewModel.allTransactions.collectAsState()
@@ -3051,7 +3086,7 @@ fun SafeSpendScreen(
     }
     val totalIncome = calculatedIncome
 
-    val totalCommitments = rentAmount + emiAmount + sipAmount + otherMandatory
+    val totalCommitments = customCommitments.sumOf { it.amount }
     val disposableIncome = (totalIncome - totalCommitments).coerceAtLeast(0.0)
 
     val variableSpent = remember(transactions) {

@@ -409,4 +409,12 @@ class SecurityHelper(private val context: Context) {
             .remove("user_registered")
             .apply()
     }
+
+    fun saveCustomCommitmentsJson(json: String) {
+        sharedPrefs.edit().putString("custom_commitments", json).apply()
+    }
+
+    fun getCustomCommitmentsJson(): String? {
+        return sharedPrefs.getString("custom_commitments", null)
+    }
 }

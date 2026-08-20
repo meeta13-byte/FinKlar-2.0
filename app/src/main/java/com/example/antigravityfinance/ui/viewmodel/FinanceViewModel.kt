@@ -288,6 +288,62 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _setZeroTimestamp = MutableStateFlow(securityHelper.getSetZeroTimestamp())
     val setZeroTimestamp: StateFlow<Long> = _setZeroTimestamp.asStateFlow()
 
+    private val _customCommitments = MutableStateFlow<List<CustomCommitment>>(loadCustomCommitmentsFromPref())
+    val customCommitments: StateFlow<List<CustomCommitment>> = _customCommitments.asStateFlow()
+
+    private fun loadCustomCommitmentsFromPref(): List<CustomCommitment> {
+        val raw = securityHelper.getCustomCommitmentsJson() ?: return emptyList()
+        val list = mutableListOf<CustomCommitment>()
+        try {
+            val jsonArray = org.json.JSONArray(raw)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                list.add(
+                    CustomCommitment(
+                        id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                        amount = obj.optDouble("amount", 0.0),
+                        day = obj.optInt("day", 1),
+                        notes = obj.optString("notes", "")
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+
+    fun addOrUpdateCommitment(commitment: CustomCommitment) {
+        val current = _customCommitments.value.toMutableList()
+        val index = current.indexOfFirst { it.id == commitment.id }
+        if (index >= 0) {
+            current[index] = commitment
+        } else {
+            current.add(commitment)
+        }
+        _customCommitments.value = current
+        saveCustomCommitmentsToPref(current)
+    }
+
+    fun deleteCommitment(commitmentId: String) {
+        val current = _customCommitments.value.filter { it.id != commitmentId }
+        _customCommitments.value = current
+        saveCustomCommitmentsToPref(current)
+    }
+
+    private fun saveCustomCommitmentsToPref(list: List<CustomCommitment>) {
+        val jsonArray = org.json.JSONArray()
+        list.forEach {
+            val obj = org.json.JSONObject()
+            obj.put("id", it.id)
+            obj.put("amount", it.amount)
+            obj.put("day", it.day)
+            obj.put("notes", it.notes)
+            jsonArray.put(obj)
+        }
+        securityHelper.saveCustomCommitmentsJson(jsonArray.toString())
+    }
+
     fun saveSetZeroTimestamp(timestamp: Long) {
         securityHelper.saveSetZeroTimestamp(timestamp)
         _setZeroTimestamp.value = timestamp
@@ -1162,3 +1218,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 }
+
+data class CustomCommitment(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val amount: Double,
+    val day: Int,
+    val notes: String = ""
+)

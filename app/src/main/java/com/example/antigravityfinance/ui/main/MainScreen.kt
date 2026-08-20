@@ -105,24 +105,18 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.Transparent)
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(start = 13.dp, end = 13.dp, bottom = 17.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(elevation = 16.dp, shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                        .height(48.dp)
+                        .shadow(elevation = 16.dp, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                         .background(
-                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFF2C2C2E),
-                                    Color(0xFF1C1C1E),
-                                    Color(0xFF121212)
-                                )
-                            ),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+                            color = Color(0xEB070707),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
                         )
-                        .border(1.dp, Color(0xFF2C2C2E), androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
-                        .padding(vertical = 10.dp),
+                        .border(0.5.dp, Color(0xFF1C1C1E), androidx.compose.foundation.shape.RoundedCornerShape(20.dp)),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -130,6 +124,7 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                         val isSelected = activeTab == tab
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                             modifier = Modifier
                                 .clickable(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -140,14 +135,14 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                             Icon(
                                 imageVector = tab.icon,
                                 contentDescription = tab.displayName,
-                                tint = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
-                                modifier = Modifier.size(26.dp)
+                                tint = if (isSelected) Color(0xFF8AFF6A) else Color(0xFF8E8E93),
+                                modifier = Modifier.size(22.dp)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = tab.displayName.translate(language),
-                                color = if (isSelected) Color(0xFF00FF66) else Color(0xFF8E8E93),
-                                fontSize = 10.sp,
+                                color = if (isSelected) Color(0xFF8AFF6A) else Color(0xFF8E8E93),
+                                fontSize = 9.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 fontFamily = FontFamily.SansSerif
                             )
