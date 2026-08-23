@@ -25,6 +25,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import com.example.antigravityfinance.service.sms.detection.*
+import com.example.antigravityfinance.ui.screens.translate
 
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -436,12 +437,17 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             walletRepository.allWallets.first().let { current ->
                 if (current.isEmpty()) {
                     val now = System.currentTimeMillis()
-                    walletRepository.insertWallet(Wallet(name = "Default Spending Wallet", balance = 0.0, purpose = "Default spending wallet", isDefault = true, createdAt = now, investedAmount = 0.0, initialAmount = 11500.0))
-                    walletRepository.insertWallet(Wallet(name = "Personal Savings", balance = 0.0, purpose = "Personal savings", isDefault = false, createdAt = now + 1, investedAmount = 9968.0, initialAmount = 27844.0))
-                    walletRepository.insertWallet(Wallet(name = "Monthly Living", balance = 0.0, purpose = "Monthly living expenses", isDefault = false, createdAt = now + 2, investedAmount = 0.0, initialAmount = 0.0))
-                    walletRepository.insertWallet(Wallet(name = "Investments", balance = 0.0, purpose = "Invested savings", isDefault = false, createdAt = now + 3, investedAmount = 0.0, initialAmount = 9968.0))
-                    walletRepository.insertWallet(Wallet(name = "Future Expenses", balance = 0.0, purpose = "Future planned expenses", isDefault = false, createdAt = now + 4, investedAmount = 0.0, initialAmount = 0.0))
-                    walletRepository.insertWallet(Wallet(name = "Money Receivable", balance = 0.0, purpose = "Lent out money (asset)", isDefault = false, createdAt = now + 5, investedAmount = 0.0, initialAmount = 1800.0))
+                    walletRepository.insertWallet(
+                        Wallet(
+                            name = "Current Wallet",
+                            balance = 0.0,
+                            purpose = "Current Wallet",
+                            isDefault = true,
+                            createdAt = now,
+                            investedAmount = 0.0,
+                            initialAmount = 0.0
+                        )
+                    )
                 }
             }
 
@@ -615,6 +621,101 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 android.widget.Toast.makeText(getApplication(), "Gemini OCR failed: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private val _isPdfParsing = MutableStateFlow(false)
+    val isPdfParsing: StateFlow<Boolean> = _isPdfParsing.asStateFlow()
+
+    private val _pdfParsingProgress = MutableStateFlow("")
+    val pdfParsingProgress: StateFlow<String> = _pdfParsingProgress.asStateFlow()
+
+    fun importTransactionsFromPdf(pdfUri: android.net.Uri) {
+        viewModelScope.launch {
+            val apiKey = securityHelper.getGeminiApiKey()
+            if (apiKey.isBlank()) {
+                android.widget.Toast.makeText(getApplication(), "Gemini API Key is missing! Go to settings to set it.", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            
+            _isPdfParsing.value = true
+            _pdfParsingProgress.value = "Reading PDF document...".translate(language.value)
+            
+            try {
+                val bitmaps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    renderPdfToBitmaps(getApplication(), pdfUri)
+                }
+                
+                if (bitmaps.isEmpty()) {
+                    _isPdfParsing.value = false
+                    android.widget.Toast.makeText(getApplication(), "Failed to read PDF or document is empty.", android.widget.Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
+                var totalImported = 0
+                val defaultWallet = walletRepository.getDefaultWallet()
+                val walletId = defaultWallet?.id
+                
+                for (index in bitmaps.indices) {
+                    _pdfParsingProgress.value = "Extracting transactions: page ${index + 1} of ${bitmaps.size}...".translate(language.value)
+                    val bitmap = bitmaps[index]
+                    val parsedList = OcrScanner.scanReceiptReal(bitmap, apiKey)
+                    
+                    if (parsedList.isNotEmpty()) {
+                        for (tx in parsedList) {
+                            val finalTx = tx.copy(
+                                status = TransactionStatus.CONFIRMED,
+                                walletId = walletId
+                            )
+                            transactionRepository.insertTransaction(finalTx)
+                            totalImported++
+                        }
+                    }
+                }
+                
+                // If a default/current wallet exists, recompute its balance
+                if (walletId != null) {
+                    val updatedBal = walletRepository.recomputeWalletBalance(walletId)
+                    val wallet = walletRepository.getWalletById(walletId)
+                    if (wallet != null) {
+                        walletRepository.updateWallet(wallet.copy(balance = updatedBal))
+                    }
+                }
+                
+                _isPdfParsing.value = false
+                android.widget.Toast.makeText(getApplication(), "Successfully imported $totalImported transactions!", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                _isPdfParsing.value = false
+                android.widget.Toast.makeText(getApplication(), "Failed to process statement PDF: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun renderPdfToBitmaps(context: android.content.Context, pdfUri: android.net.Uri): List<android.graphics.Bitmap> {
+        val bitmaps = mutableListOf<android.graphics.Bitmap>()
+        try {
+            val fileDescriptor = context.contentResolver.openFileDescriptor(pdfUri, "r")
+            if (fileDescriptor != null) {
+                val renderer = android.graphics.pdf.PdfRenderer(fileDescriptor)
+                val pageCount = renderer.pageCount.coerceAtMost(3) // Limit to first 3 pages
+                for (i in 0 until pageCount) {
+                    val page = renderer.openPage(i)
+                    val width = 1080
+                    val height = (width * page.height / page.width)
+                    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bitmap)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    
+                    page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmaps.add(bitmap)
+                    page.close()
+                }
+                renderer.close()
+                fileDescriptor.close()
+            }
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+        return bitmaps
     }
 
     fun confirmScannedTransaction() {
@@ -1177,19 +1278,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteWallet(wallet: Wallet, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
-            if (wallet.isDefault) {
-                onError("The Default Spending Wallet cannot be deleted, only renamed.")
-                return@launch
-            }
-            if (wallet.balance != 0.0) {
-                onError("Cannot delete a wallet with non-zero balance. Please move the balance out first.")
-                return@launch
-            }
             val success = walletRepository.deleteWallet(wallet)
             if (success) {
                 onSuccess()
             } else {
-                onError("Cannot delete a wallet with active transactions or history.")
+                onError("Failed to delete wallet.")
             }
         }
     }
