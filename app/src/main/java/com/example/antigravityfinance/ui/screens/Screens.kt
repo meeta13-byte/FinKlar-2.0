@@ -1948,7 +1948,10 @@ fun TransactionsScreen(
                                 }
                                 DropdownMenu(
                                     expanded = showSortMenu,
-                                    onDismissRequest = { showSortMenu = false }
+                                    onDismissRequest = { showSortMenu = false },
+                                    modifier = Modifier
+                                        .background(Color.Black)
+                                        .border(0.5.dp, Color(0xFF2C2C2E), RoundedCornerShape(8.dp))
                                 ) {
                                     listOf("Date", "Amount", "Merchant").forEach { option ->
                                         DropdownMenuItem(
@@ -2541,7 +2544,10 @@ fun TransactionDetailsDialog(
 
                 DropdownMenu(
                     expanded = walletExpanded,
-                    onDismissRequest = { walletExpanded = false }
+                    onDismissRequest = { walletExpanded = false },
+                    modifier = Modifier
+                        .background(Color.Black)
+                        .border(0.5.dp, Color(0xFF2C2C2E), RoundedCornerShape(8.dp))
                 ) {
                     DropdownMenuItem(
                         text = { Text("None (Unallocated)".translate(language)) },
@@ -2756,7 +2762,10 @@ fun ManualTransactionDialog(
 
                     DropdownMenu(
                         expanded = walletExpanded,
-                        onDismissRequest = { walletExpanded = false }
+                        onDismissRequest = { walletExpanded = false },
+                        modifier = Modifier
+                            .background(Color.Black)
+                            .border(0.5.dp, Color(0xFF2C2C2E), RoundedCornerShape(8.dp))
                     ) {
                         walletsList.forEach { w ->
                             DropdownMenuItem(
@@ -4443,6 +4452,18 @@ fun FinancialToolsScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ToolCard(
+                    title = "Upload E-Passbook".translate(language),
+                    subtitle = "Bulk import transactions from bank PDF statement".translate(language),
+                    icon = Icons.Rounded.UploadFile,
+                    onClick = { activeTool = "E-Passbook" },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     } else {
         Column(
@@ -4465,6 +4486,7 @@ fun FinancialToolsScreen(
                         "Investments" -> "Investment Portfolio".translate(language)
                         "Splitwise" -> "Splitwise".translate(language)
                         "Statistics" -> "Statistics".translate(language)
+                        "E-Passbook" -> "Upload E-Passbook".translate(language)
                         else -> ""
                     },
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
@@ -4478,6 +4500,70 @@ fun FinancialToolsScreen(
                     "Investments" -> InvestmentsScreen(viewModel = viewModel)
                     "Splitwise" -> SplitwiseScreen(viewModel = viewModel)
                     "Statistics" -> StatisticsScreen(viewModel = viewModel)
+                    "E-Passbook" -> {
+                        val isPdfParsing by viewModel.isPdfParsing.collectAsState()
+                        val pdfParsingProgress by viewModel.pdfParsingProgress.collectAsState()
+
+                        val launcher = rememberLauncherForActivityResult(
+                            contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+                        ) { uri: android.net.Uri? ->
+                            if (uri != null) {
+                                viewModel.importTransactionsFromPdf(uri)
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            if (isPdfParsing) {
+                                CircularProgressIndicator(color = Color(0xFF8AFF6A))
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = pdfParsingProgress,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.UploadFile,
+                                    contentDescription = null,
+                                    tint = Color(0xFF8AFF6A),
+                                    modifier = Modifier.size(72.dp)
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Text(
+                                    text = "Import Bank Statement".translate(language),
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Upload the PDF statement downloaded from your bank app. Gemini will automatically extract and confirm your transaction history.".translate(language),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF8E8E93),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                                Spacer(modifier = Modifier.height(32.dp))
+                                Button(
+                                    onClick = { launcher.launch("application/pdf") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8AFF6A), contentColor = Color.Black),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = "Select PDF File".translate(language),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
