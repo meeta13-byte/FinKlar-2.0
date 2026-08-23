@@ -30,6 +30,9 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.graphics.Brush
+import com.example.antigravityfinance.theme.InterFontFamily
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 
 enum class MainTab(val displayName: String, val icon: ImageVector) {
@@ -105,47 +108,67 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.Transparent)
-                    .padding(start = 13.dp, end = 13.dp, bottom = 17.dp)
+                    .padding(start = 20.dp, end = 20.dp, bottom = 26.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .shadow(elevation = 16.dp, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                        .height(59.dp)
+                        .shadow(elevation = 16.dp, shape = RoundedCornerShape(30.dp))
                         .background(
-                            color = Color(0xEB070707),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                            color = Color(0xE4080A09),
+                            shape = RoundedCornerShape(30.dp)
                         )
-                        .border(0.5.dp, Color(0xFF1C1C1E), androidx.compose.foundation.shape.RoundedCornerShape(20.dp)),
+                        .border(1.dp, Color(0xFF26312C), RoundedCornerShape(30.dp)),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     visibleTabs.forEach { tab ->
                         val isSelected = activeTab == tab
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                        Box(
                             modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
                                 .clickable(
                                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                     indication = null
-                                ) { activeTab = tab }
-                                .width(72.dp)
+                                ) { activeTab = tab },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.displayName,
-                                tint = if (isSelected) Color(0xFF8AFF6A) else Color(0xFF8E8E93),
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = tab.displayName.translate(language),
-                                color = if (isSelected) Color(0xFF8AFF6A) else Color(0xFF8E8E93),
-                                fontSize = 9.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontFamily = FontFamily.SansSerif
-                            )
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 6.dp)
+                                        .width(20.dp)
+                                        .height(3.dp)
+                                        .background(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(Color(0xFF19C37D), Color(0xFF32E68C))
+                                            ),
+                                            shape = RoundedCornerShape(1.5.dp)
+                                        )
+                                )
+                            }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.displayName,
+                                    tint = if (isSelected) Color(0xFF19C37D) else Color(0xFF9AA59F),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = tab.displayName.translate(language),
+                                    color = if (isSelected) Color(0xFF19C37D) else Color(0xFF9AA59F),
+                                    fontSize = 9.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontFamily = InterFontFamily
+                                )
+                            }
                         }
                     }
                 }

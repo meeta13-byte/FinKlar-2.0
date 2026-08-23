@@ -735,10 +735,11 @@ fun SipAlertCard(
 fun GlowingCircularProgressIndicator(
     progress: Float,
     modifier: Modifier = Modifier,
-    color: Color = Color(0xFF8AFF6A),
-    trackColor: Color = Color(0xFF1F1F1F),
-    strokeWidth: androidx.compose.ui.unit.Dp = 8.dp
+    strokeWidth: androidx.compose.ui.unit.Dp = 10.dp
 ) {
+    val gradientColors = listOf(Color(0xFF19C37D), Color(0xFF32E68C), Color(0xFF8CF5C5))
+    val trackColor = Color(0xFF26312C).copy(alpha = 0.3f)
+
     androidx.compose.foundation.Canvas(modifier = modifier) {
         val sizePx = size.minDimension
         val strokeWidthPx = strokeWidth.toPx()
@@ -758,9 +759,16 @@ fun GlowingCircularProgressIndicator(
 
         val sweepAngle = progress * 360f
 
-        // Wide glow layer: Blur 40px (simulate with stroke width 3.0x, opacity 10%)
+        val gradientBrush = androidx.compose.ui.graphics.Brush.linearGradient(
+            colors = gradientColors,
+            start = androidx.compose.ui.geometry.Offset(0f, 0f),
+            end = androidx.compose.ui.geometry.Offset(size.width, size.height)
+        )
+
+        // Wide glow layer: Blur 40px (simulate with stroke width 3.0x, opacity 12%)
         drawArc(
-            color = color.copy(alpha = 0.10f),
+            brush = gradientBrush,
+            alpha = 0.12f,
             startAngle = -90f,
             sweepAngle = sweepAngle,
             useCenter = false,
@@ -772,9 +780,10 @@ fun GlowingCircularProgressIndicator(
             )
         )
 
-        // Narrow glow layer: Blur 20px (simulate with stroke width 1.8x, opacity 28%)
+        // Narrow glow layer: Blur 20px (simulate with stroke width 1.8x, opacity 25%)
         drawArc(
-            color = color.copy(alpha = 0.28f),
+            brush = gradientBrush,
+            alpha = 0.25f,
             startAngle = -90f,
             sweepAngle = sweepAngle,
             useCenter = false,
@@ -788,7 +797,7 @@ fun GlowingCircularProgressIndicator(
 
         // Main active indicator layer
         drawArc(
-            color = color,
+            brush = gradientBrush,
             startAngle = -90f,
             sweepAngle = sweepAngle,
             useCenter = false,
@@ -814,9 +823,17 @@ fun ProgressRingCard(
     onDebitClick: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(30.dp),
+        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(30.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF151B18), Color(0xFF101412), Color(0xFF080A09))
+                )
+            )
     ) {
         Row(
             modifier = Modifier
@@ -832,26 +849,30 @@ fun ProgressRingCard(
             ) {
                 GlowingCircularProgressIndicator(
                     progress = percent / 100f,
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color(0xFF8AFF6A),
-                    trackColor = Color(0xFF1F1F1F),
-                    strokeWidth = 8.dp
+                    modifier = Modifier.fillMaxSize()
                 )
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "$percent%",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFFF4F7F5)
                     )
                     Text(
                         text = "Amount left",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF8E8E93)
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                        color = Color(0xFF9AA59F)
                     )
+                    val amountColor = if (amountText.contains("-")) Color(0xFFFF5C67) else Color(0xFF19C37D)
                     Text(
                         text = amountText,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = amountColor
                     )
                 }
             }
@@ -874,15 +895,26 @@ fun ProgressRingCard(
                         Box(
                             modifier = Modifier
                                 .size(10.dp)
-                                .background(Color(0xFF00FF66), CircleShape)
+                                .background(Color(0xFF19C37D), CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Credit", color = Color(0xFF8E8E93), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "Credit",
+                            color = Color(0xFF9AA59F),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = InterFontFamily)
+                        )
                     }
-                    Text(creditAmount, color = Color.White, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = creditAmount,
+                        color = Color(0xFF19C37D),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        )
+                    )
                 }
 
-                HorizontalDivider(color = Color(0xFF1F1F1F))
+                HorizontalDivider(color = Color(0xFF26312C))
 
                 Row(
                     modifier = Modifier
@@ -895,12 +927,23 @@ fun ProgressRingCard(
                         Box(
                             modifier = Modifier
                                 .size(10.dp)
-                                .background(Color(0xFFFF3B30), CircleShape)
+                                .background(Color(0xFFFF5C67), CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Debit", color = Color(0xFF8E8E93), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "Debit",
+                            color = Color(0xFF9AA59F),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = InterFontFamily)
+                        )
                     }
-                    Text(debitAmount, color = Color.White, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = debitAmount,
+                        color = Color(0xFFFF5C67),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        )
+                    )
                 }
             }
         }
@@ -915,11 +958,18 @@ fun AlertCard(
     onClick: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         modifier = Modifier
             .width(140.dp)
             .height(110.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF151B18), Color(0xFF101412))
+                )
+            )
             .clickable(onClick = onClick)
     ) {
         Column(
@@ -935,13 +985,14 @@ fun AlertCard(
                 Box(
                     modifier = Modifier
                         .size(36.dp)
-                        .background(Color(0xFF81D4FA).copy(alpha = 0.15f), CircleShape),
+                        .background(Color(0xFF1B241F), CircleShape)
+                        .border(0.5.dp, Color(0xFF26312C), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Rounded.Event,
                         contentDescription = null,
-                        tint = Color(0xFF81D4FA),
+                        tint = Color(0xFF19C37D),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -949,20 +1000,26 @@ fun AlertCard(
                 Column {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFFF4F7F5)
                     )
                     Text(
                         text = dueDate,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF8E8E93)
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                        color = Color(0xFF9AA59F)
                     )
                 }
             }
             Text(
                 text = amount,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF81D4FA)
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = InterFontFamily
+                ),
+                color = Color(0xFF58C7F5)
             )
         }
     }
@@ -978,40 +1035,62 @@ fun WalletBalanceCard(
     onClick: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        shape = RoundedCornerShape(30.dp),
+        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(30.dp))
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF19C37D).copy(alpha = 0.08f),
+                        Color(0xFF151B18),
+                        Color(0xFF080A09)
+                    ),
+                    radius = 450f
+                )
+            )
             .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = walletName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = InterFontFamily),
+                    color = Color(0xFFF4F7F5)
                 )
+                val balanceColor = if (balance.contains("-")) Color(0xFFFF5C67) else Color(0xFF19C37D)
                 Text(
                     text = balance,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = Color(0xFF81D4FA)
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = balanceColor
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "Spent: $spent",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF8E8E93)
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                        color = Color(0xFF9AA59F)
                     )
                     Text(
                         text = "Rem: $remaining",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF00FF66)
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFF19C37D)
                     )
                 }
             }
@@ -1019,13 +1098,14 @@ fun WalletBalanceCard(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color(0xFF2C2C2E), CircleShape),
+                    .background(Color(0xFF1B241F), CircleShape)
+                    .border(0.5.dp, Color(0xFF26312C), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Rounded.AccountBalanceWallet,
                     contentDescription = null,
-                    tint = Color(0xFF8E8E93),
+                    tint = Color(0xFF19C37D),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1145,26 +1225,30 @@ fun DashboardScreen(
             Column {
                 Text(
                     text = greeting.translate(language),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF8E8E93)
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = InterFontFamily),
+                    color = Color(0xFF9AA59F)
                 )
                 Text(
                     text = userName.ifBlank { "FinKlar 2.0" },
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                    color = Color.White
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFFF4F7F5)
                 )
             }
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .background(Color(0xFF1C1C1E), CircleShape)
+                    .background(Color(0xFF1B241F), CircleShape)
+                    .border(1.dp, Color(0xFF26312C), CircleShape)
                     .clickable { showPrivacyDialog = true },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Rounded.HelpOutline,
                     contentDescription = "Privacy Policy",
-                    tint = Color.White,
+                    tint = Color(0xFF19C37D),
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -1182,11 +1266,40 @@ fun DashboardScreen(
         )
 
         // Alerts Section
-        Text(
-            text = "Alerts".translate(language),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(16.dp)
+                        .background(Color(0xFF19C37D), RoundedCornerShape(1.5.dp))
+                )
+                Text(
+                    text = "Alerts".translate(language),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFFF4F7F5)
+                )
+            }
+            Text(
+                text = "View all >".translate(language),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = InterFontFamily
+                ),
+                color = Color(0xFF19C37D),
+                modifier = Modifier.clickable { }
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -1220,12 +1333,18 @@ fun DashboardScreen(
 
             // Trailing '+' Add Card
             Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-                border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                 modifier = Modifier
                     .width(140.dp)
                     .height(110.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFF151B18), Color(0xFF101412))
+                        )
+                    )
                     .clickable {
                         selectedCommitment = null
                         showEditCommitments = true
@@ -1242,14 +1361,15 @@ fun DashboardScreen(
                         Icon(
                             imageVector = Icons.Rounded.Add,
                             contentDescription = "Add Commitment",
-                            tint = Color(0xFF00FF66),
+                            tint = Color(0xFF19C37D),
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
                             text = "Add".translate(language),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00FF66)
+                            fontFamily = InterFontFamily,
+                            color = Color(0xFF19C37D)
                         )
                     }
                 }
@@ -1257,11 +1377,40 @@ fun DashboardScreen(
         }
 
         // Wallet Balances Section
-        Text(
-            text = "Wallet Balances".translate(language),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(16.dp)
+                        .background(Color(0xFF19C37D), RoundedCornerShape(1.5.dp))
+                )
+                Text(
+                    text = "Wallet Balances".translate(language),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFFF4F7F5)
+                )
+            }
+            Text(
+                text = "View all >".translate(language),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = InterFontFamily
+                ),
+                color = Color(0xFF19C37D),
+                modifier = Modifier.clickable { }
+            )
+        }
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1284,21 +1433,40 @@ fun DashboardScreen(
                 onClick = { showAddWalletDialog = true },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00FF66))
+                border = BorderStroke(1.dp, Color(0xFF26312C)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF19C37D))
             ) {
                 Icon(Icons.Rounded.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Wallet".translate(language), fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Add Wallet".translate(language),
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = InterFontFamily
+                )
             }
         }
 
         // Recent Transactions Section
-        Text(
-            text = "Recent Transactions".translate(language),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(16.dp)
+                    .background(Color(0xFF19C37D), RoundedCornerShape(1.5.dp))
+            )
+            Text(
+                text = "Recent Transactions".translate(language),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = InterFontFamily
+                ),
+                color = Color(0xFFF4F7F5)
+            )
+        }
 
         val recentTx = remember(confirmedTx) {
             confirmedTx.sortedByDescending { it.date }.take(5)
