@@ -51,16 +51,27 @@ class WalletRepository(
 
     suspend fun deleteWallet(wallet: Wallet): Boolean {
         val entity = walletDao.getWalletById(wallet.id) ?: return false
-        if (entity.isDefault) {
-            return false
+        
+        // Find if there is another wallet to make default or receive transactions
+        val allWalletsList = walletDao.getAllWalletsList()
+        val otherWallets = allWalletsList.filter { it.id != wallet.id }
+        
+        if (entity.isDefault && otherWallets.isNotEmpty()) {
+            val newDefault = otherWallets.first()
+            walletDao.update(newDefault.copy(isDefault = true))
+            transactionDao.moveTransactionsToWallet(wallet.id, newDefault.id)
+        } else {
+            if (otherWallets.isNotEmpty()) {
+                val fallbackDefault = otherWallets.find { it.isDefault } ?: otherWallets.first()
+                transactionDao.moveTransactionsToWallet(wallet.id, fallbackDefault.id)
+            } else {
+                transactionDao.clearWalletForTransactions(wallet.id)
+            }
         }
-        if (entity.balance != 0.0) {
-            return false
-        }
-        val txCount = walletDao.getTransactionCount(wallet.id)
-        if (txCount > 0) {
-            return false
-        }
+        
+        // Clean up transfers associated with the deleted wallet
+        walletTransferDao.deleteTransfersForWallet(wallet.id)
+        
         walletDao.delete(entity)
         return true
     }
