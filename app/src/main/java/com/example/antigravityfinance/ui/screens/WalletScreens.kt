@@ -2,6 +2,7 @@ package com.example.antigravityfinance.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -396,27 +397,25 @@ fun WalletDetailScreen(
                     IconButton(onClick = { showEditDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit")
                     }
-                    if (!wallet.isDefault) {
-                        IconButton(
-                            onClick = {
-                                viewModel.deleteWallet(
-                                    wallet = wallet,
-                                    onCornerCaseSuccess = {
-                                        android.widget.Toast.makeText(context, "Wallet deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
-                                        onBack()
-                                    },
-                                    onError = { error ->
-                                        android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
-                                    }
-                                )
-                            }
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error
+                    IconButton(
+                        onClick = {
+                            viewModel.deleteWallet(
+                                wallet = wallet,
+                                onCornerCaseSuccess = {
+                                    android.widget.Toast.makeText(context, "Wallet deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                    onBack()
+                                },
+                                onError = { error ->
+                                    android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
+                                }
                             )
                         }
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             )
@@ -702,7 +701,10 @@ fun TransferDialog(
 
                     DropdownMenu(
                         expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier
+                            .background(Color.Black)
+                            .border(0.5.dp, Color(0xFF2C2C2E), RoundedCornerShape(8.dp))
                     ) {
                         destinationWallets.forEach { target ->
                             DropdownMenuItem(
