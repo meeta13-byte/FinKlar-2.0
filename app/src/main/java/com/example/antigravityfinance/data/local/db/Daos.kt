@@ -31,6 +31,12 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE walletId = :walletId ORDER BY date DESC")
     fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>>
+
+    @Query("UPDATE transactions SET walletId = :newWalletId WHERE walletId = :oldWalletId")
+    suspend fun moveTransactionsToWallet(oldWalletId: Int, newWalletId: Int)
+
+    @Query("UPDATE transactions SET walletId = NULL WHERE walletId = :walletId")
+    suspend fun clearWalletForTransactions(walletId: Int)
 }
 
 @Dao
@@ -148,6 +154,9 @@ interface WalletDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE walletId = :walletId")
     suspend fun getTransactionCount(walletId: Int): Int
+
+    @Query("SELECT * FROM wallets ORDER BY createdAt ASC")
+    suspend fun getAllWalletsList(): List<WalletEntity>
 }
 
 @Dao
@@ -160,6 +169,9 @@ interface WalletTransferDao {
 
     @Query("SELECT * FROM wallet_transfers WHERE fromWalletId = :walletId OR toWalletId = :walletId ORDER BY timestamp DESC")
     fun getTransfersForWallet(walletId: Int): Flow<List<WalletTransferEntity>>
+
+    @Query("DELETE FROM wallet_transfers WHERE fromWalletId = :walletId OR toWalletId = :walletId")
+    suspend fun deleteTransfersForWallet(walletId: Int)
 }
 
 
