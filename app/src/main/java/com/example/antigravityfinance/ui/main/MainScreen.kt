@@ -116,7 +116,7 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                         .height(59.dp)
                         .shadow(elevation = 16.dp, shape = RoundedCornerShape(30.dp))
                         .background(
-                            color = Color(0xE4080A09),
+                            color = Color(0xE4101412),
                             shape = RoundedCornerShape(30.dp)
                         )
                         .border(1.dp, Color(0xFF26312C), RoundedCornerShape(30.dp)),
@@ -144,7 +144,7 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                                         .height(3.dp)
                                         .background(
                                             brush = Brush.horizontalGradient(
-                                                colors = listOf(Color(0xFF19C37D), Color(0xFF32E68C))
+                                                colors = listOf(Color(0xFF32E68C), Color(0xFF8CF5C5))
                                             ),
                                             shape = RoundedCornerShape(1.5.dp)
                                         )
@@ -157,13 +157,13 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
                                 Icon(
                                     imageVector = tab.icon,
                                     contentDescription = tab.displayName,
-                                    tint = if (isSelected) Color(0xFF19C37D) else Color(0xFF9AA59F),
+                                    tint = if (isSelected) Color(0xFF32E68C) else Color(0xFF9AA59F),
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = tab.displayName.translate(language),
-                                    color = if (isSelected) Color(0xFF19C37D) else Color(0xFF9AA59F),
+                                    color = if (isSelected) Color(0xFF32E68C) else Color(0xFF9AA59F),
                                     fontSize = 9.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     fontFamily = InterFontFamily

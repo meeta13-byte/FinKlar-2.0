@@ -19,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -2482,11 +2484,28 @@ fun TransactionRow(
     onConfirm: (() -> Unit)? = null,
     onReject: (() -> Unit)? = null
 ) {
-    val accentColor = if (tx.isIncome) Color(0xFF00FF66) else Color(0xFFFF3B30)
+    val accentColor = if (tx.isIncome) Color(0xFF19C37D) else Color(0xFFFF5C67)
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF151B18))
+            .drawBehind {
+                val highlightHeight = 1.5.dp.toPx()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFF19C37D).copy(alpha = 0.06f), Color.Transparent),
+                        startY = 0f,
+                        endY = highlightHeight
+                    ),
+                    topLeft = Offset.Zero,
+                    size = androidx.compose.ui.geometry.Size(size.width, highlightHeight)
+                )
+            }
+            .clickable { onClick() }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -2496,13 +2515,14 @@ fun TransactionRow(
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .background(Color(0xFF2C2C2E), CircleShape),
+                        .background(Color(0xFF1B241F), CircleShape)
+                        .border(0.7.dp, Color(0xFF26312C), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = getCategoryIcon(tx.category),
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = Color(0xFFF4F7F5),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -2511,8 +2531,11 @@ fun TransactionRow(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = tx.merchant,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = InterFontFamily
+                            ),
+                            color = Color(0xFFF4F7F5),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -2521,10 +2544,10 @@ fun TransactionRow(
                             Spacer(modifier = Modifier.width(6.dp))
                             SuggestionChip(
                                 onClick = {},
-                                label = { Text("PENDING", fontSize = 9.sp) },
+                                label = { Text("PENDING", fontSize = 9.sp, fontFamily = InterFontFamily) },
                                 colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = Color(0xFFFF3B30).copy(alpha = 0.15f),
-                                    labelColor = Color(0xFFFF3B30)
+                                    containerColor = Color(0xFFFF5C67).copy(alpha = 0.15f),
+                                    labelColor = Color(0xFFFF5C67)
                                 ),
                                 border = null
                             )
@@ -2532,10 +2555,10 @@ fun TransactionRow(
                             Spacer(modifier = Modifier.width(6.dp))
                             SuggestionChip(
                                 onClick = {},
-                                label = { Text("CANCELLED", fontSize = 9.sp) },
+                                label = { Text("CANCELLED", fontSize = 9.sp, fontFamily = InterFontFamily) },
                                 colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = Color(0xFF2C2C2E),
-                                    labelColor = Color(0xFF8E8E93)
+                                    containerColor = Color(0xFF1B241F),
+                                    labelColor = Color(0xFF9AA59F)
                                 ),
                                 border = null
                             )
@@ -2543,19 +2566,25 @@ fun TransactionRow(
                     }
                     Text(
                         text = SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(tx.date)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF8E8E93)
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                        color = Color(0xFF9AA59F)
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "${if (tx.isIncome) "+" else "-"}${currency.symbol}${String.format("%,.2f", tx.amount)}",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
                         color = accentColor
                     )
                     Text(
                         text = if (tx.isIncome) "Credit" else "Debit",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
                         color = accentColor
                     )
                 }
@@ -2569,26 +2598,26 @@ fun TransactionRow(
                 ) {
                     Button(
                         onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF66)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF19C37D)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Confirm", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Confirm", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold, fontFamily = InterFontFamily)
                     }
-                    OutlinedButton(
+                    Button(
                         onClick = onReject,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF3B30)),
-                        border = BorderStroke(1.dp, Color(0xFFFF3B30)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B241F)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 4.dp)
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFF5C67))
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFFF5C67))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Ignore", fontSize = 12.sp)
+                        Text("Reject", fontSize = 12.sp, color = Color(0xFFFF5C67), fontWeight = FontWeight.Bold, fontFamily = InterFontFamily)
                     }
                 }
             }
