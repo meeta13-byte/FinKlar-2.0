@@ -782,6 +782,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun undoDeleteTransaction(transaction: Transaction) {
+        viewModelScope.launch {
+            transactionRepository.insertTransaction(transaction)
+        }
+    }
+
     fun shiftTransactionWallet(transactionId: Int, targetWalletId: Int?) {
         viewModelScope.launch {
             transactionRepository.shiftTransactionWallet(transactionId, targetWalletId)
