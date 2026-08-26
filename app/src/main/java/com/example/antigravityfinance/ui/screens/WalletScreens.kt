@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,8 +35,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import com.example.antigravityfinance.data.model.*
 import com.example.antigravityfinance.ui.viewmodel.FinanceViewModel
+import kotlinx.coroutines.launch
 import com.example.antigravityfinance.theme.*
 
 @Composable
@@ -260,7 +264,10 @@ fun AddWalletDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier.shadow(16.dp, RoundedCornerShape(16.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -340,7 +347,7 @@ fun AddWalletDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WalletDetailScreen(
     walletId: Int,
@@ -369,8 +376,12 @@ fun WalletDetailScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         containerColor = Color(0xFF080A09),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             Row(
                 modifier = Modifier
@@ -677,11 +688,125 @@ fun WalletDetailScreen(
                         .weight(1f)
                 ) {
                     items(walletTransactions, key = { it.id }) { tx ->
-                        TransactionRow(
-                            tx = tx,
-                            currency = currency,
-                            onClick = {}
+                        var showMenu by remember { mutableStateOf(false) }
+                        var showWalletSelection by remember { mutableStateOf(false) }
+
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                    viewModel.deleteTransaction(tx)
+                                    scope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "Transaction deleted",
+                                            actionLabel = "Undo",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            viewModel.undoDeleteTransaction(tx)
+                                        }
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                         )
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                enableDismissFromStartToEnd = true,
+                                enableDismissFromEndToStart = false,
+                                backgroundContent = {
+                                    val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                                        Color.Red
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(color, shape = RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color.White
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .combinedClickable(
+                                            onClick = { },
+                                            onLongClick = { showMenu = true }
+                                        )
+                                ) {
+                                    TransactionRow(
+                                        tx = tx,
+                                        currency = currency,
+                                        onClick = {}
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                                modifier = Modifier
+                                    .background(Color.Black)
+                                    .border(0.5.dp, Color(0xFF26312C), RoundedCornerShape(8.dp))
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Transfer Transaction", color = Color(0xFFF4F7F5), fontFamily = InterFontFamily) },
+                                    onClick = {
+                                        showMenu = false
+                                        showWalletSelection = true
+                                    }
+                                )
+                            }
+
+                            if (showWalletSelection) {
+                                val otherWallets = wallets.filter { it.id != walletId }
+                                if (otherWallets.isEmpty()) {
+                                    android.widget.Toast.makeText(context, "No other wallets available", android.widget.Toast.LENGTH_SHORT).show()
+                                    showWalletSelection = false
+                                } else {
+                                    var expandedWallets by remember { mutableStateOf(true) }
+                                    DropdownMenu(
+                                        expanded = expandedWallets,
+                                        onDismissRequest = {
+                                            expandedWallets = false
+                                            showWalletSelection = false
+                                        },
+                                        modifier = Modifier
+                                            .background(Color.Black)
+                                            .border(0.5.dp, Color(0xFF26312C), RoundedCornerShape(8.dp))
+                                    ) {
+                                        otherWallets.forEach { targetWallet ->
+                                            DropdownMenuItem(
+                                                text = { Text(targetWallet.name, color = Color(0xFFF4F7F5), fontFamily = InterFontFamily) },
+                                                onClick = {
+                                                    viewModel.shiftTransactionWallet(tx.id, targetWallet.id)
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Transferred to ${targetWallet.name}",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    expandedWallets = false
+                                                    showWalletSelection = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
             }
         }
@@ -745,7 +870,10 @@ fun EditWalletDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier.shadow(16.dp, RoundedCornerShape(16.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -830,7 +958,10 @@ fun TransferDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier.shadow(16.dp, RoundedCornerShape(16.dp))
         ) {
             Column(
                 modifier = Modifier
