@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -534,9 +535,13 @@ fun VoiceTransactionDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .shadow(16.dp, RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -1522,9 +1527,11 @@ fun DashboardScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.9f),
+                        .fillMaxHeight(0.9f)
+                        .shadow(24.dp, RoundedCornerShape(24.dp))
+                        .border(1.dp, Color(0xFF26312C), RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF080A09))
                 ) {
                     WalletDetailScreen(
                         walletId = showWalletDetailId!!,
@@ -1747,9 +1754,14 @@ fun FilteredTransactionListDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Color(0xFF151B18),
+        modifier = Modifier
+            .border(1.dp, Color(0xFF26312C), RoundedCornerShape(28.dp))
+            .shadow(16.dp, RoundedCornerShape(28.dp)),
+        shape = RoundedCornerShape(28.dp),
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close".translate(language))
+                Text("Close".translate(language), color = Color(0xFF19C37D))
             }
         },
         title = {
@@ -1805,8 +1817,7 @@ fun FilteredTransactionListDialog(
                     }
                 }
             }
-        },
-        shape = RoundedCornerShape(24.dp)
+        }
     )
 }
 
@@ -1923,7 +1934,19 @@ fun TransactionsScreen(
         list
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        modifier = modifier.fillMaxSize()
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
         // Header row with title and Scan SMS button
         Row(
             modifier = Modifier
@@ -2170,6 +2193,16 @@ fun TransactionsScreen(
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.StartToEnd) {
                                     viewModel.deleteTransaction(tx)
+                                    scope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "Transaction deleted",
+                                            actionLabel = "Undo",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            viewModel.undoDeleteTransaction(tx)
+                                        }
+                                    }
                                     true
                                 } else {
                                     false
@@ -2345,6 +2378,7 @@ fun TransactionsScreen(
             }
         }
     }
+}
 
     if (showScanChoiceDialog) {
         Dialog(onDismissRequest = { showScanChoiceDialog = false }) {
@@ -2645,9 +2679,13 @@ fun TransactionDetailsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .shadow(16.dp, RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -2884,7 +2922,10 @@ fun ManualTransactionDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+            modifier = Modifier.shadow(16.dp, RoundedCornerShape(16.dp))
         ) {
             Column(
                 modifier = Modifier
