@@ -139,4 +139,8 @@ class WalletRepository(
             block()
         }
     }
+
+    suspend fun insertTransfer(transfer: WalletTransfer): Long {
+        return walletTransferDao.insert(com.example.antigravityfinance.data.local.db.WalletTransferEntity.fromDomain(transfer))
+    }
 }
