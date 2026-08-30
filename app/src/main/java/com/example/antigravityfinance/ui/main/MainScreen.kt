@@ -101,8 +101,10 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
     var activeTab by remember { mutableStateOf(MainTab.DASHBOARD) }
     val visibleTabs = remember { MainTab.values() }
     val language by viewModel.language.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             Box(
                 modifier = Modifier
@@ -181,7 +183,7 @@ fun MainWorkspace(viewModel: FinanceViewModel) {
             label = "tab_fade"
         ) { tab ->
             when (tab) {
-                MainTab.DASHBOARD -> DashboardScreen(viewModel = viewModel)
+                MainTab.DASHBOARD -> DashboardScreen(viewModel = viewModel, snackbarHostState = snackbarHostState)
                 MainTab.TRANSACTIONS -> TransactionsScreen(viewModel = viewModel)
                 MainTab.ASSISTANT -> AssistantScreen(viewModel = viewModel)
                 MainTab.FINANCIAL_TOOLS -> FinancialToolsScreen(viewModel = viewModel)
