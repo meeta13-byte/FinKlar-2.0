@@ -353,6 +353,7 @@ fun WalletDetailScreen(
     walletId: Int,
     viewModel: FinanceViewModel,
     onBack: () -> Unit,
+    onDeleteSuccess: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.allWallets.collectAsState()
@@ -471,10 +472,14 @@ fun WalletDetailScreen(
                             .background(Color(0xFF1B241F), RoundedCornerShape(12.dp))
                             .border(0.7.dp, Color(0xFF26312C), RoundedCornerShape(12.dp))
                             .clickable {
-                                viewModel.deleteWallet(
+                                viewModel.deleteWalletWithUndo(
                                     wallet = wallet,
-                                    onCornerCaseSuccess = {
-                                        android.widget.Toast.makeText(context, "Wallet deleted successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                    onSuccess = { message ->
+                                        if (onDeleteSuccess != null) {
+                                            onDeleteSuccess(message)
+                                        } else {
+                                            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                        }
                                         onBack()
                                     },
                                     onError = { error ->
