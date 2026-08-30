@@ -417,4 +417,20 @@ class SecurityHelper(private val context: Context) {
     fun getCustomCommitmentsJson(): String? {
         return sharedPrefs.getString("custom_commitments", null)
     }
+
+    fun getUserProfilePhotoPath(): String {
+        return sharedPrefs.getString("user_profile_photo_path", "") ?: ""
+    }
+
+    fun saveUserProfilePhotoPath(path: String) {
+        sharedPrefs.edit().putString("user_profile_photo_path", path).apply()
+    }
+
+    fun getGoogleSheetUrl(): String? {
+        return sharedPrefs.getString("google_sheet_url", null)
+    }
+
+    fun saveGoogleSheetUrl(url: String?) {
+        sharedPrefs.edit().putString("google_sheet_url", url).apply()
+    }
 }
