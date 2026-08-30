@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import com.example.antigravityfinance.data.model.*
 import com.example.antigravityfinance.service.ai.AiAssistantService
 import com.example.antigravityfinance.service.ocr.OcrScanner
@@ -1133,6 +1135,7 @@ fun getFormattedDueDay(day: Int): String {
 @Composable
 fun DashboardScreen(
     viewModel: FinanceViewModel,
+    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
     val transactions by viewModel.allTransactions.collectAsState()
@@ -1143,6 +1146,9 @@ fun DashboardScreen(
     val investments by viewModel.investments.collectAsState()
     val userName by viewModel.userName.collectAsState()
     val wallets by viewModel.allWallets.collectAsState()
+    val splits by viewModel.allSplits.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val emiAmount by viewModel.emiAmount.collectAsState()
     val emiDay by viewModel.emiDay.collectAsState()
@@ -1244,20 +1250,63 @@ fun DashboardScreen(
                     color = Color(0xFFF4F7F5)
                 )
             }
+            val photoLauncher = rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+            ) { uri ->
+                if (uri != null) {
+                    try {
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        val file = java.io.File(context.filesDir, "profile_photo.jpg")
+                        val outputStream = java.io.FileOutputStream(file)
+                        inputStream?.copyTo(outputStream)
+                        inputStream?.close()
+                        outputStream.close()
+                        viewModel.updateUserProfilePhotoPath(file.absolutePath)
+                        android.widget.Toast.makeText(context, "Profile photo updated!".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "Failed to load photo: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .background(Color(0xFF1B241F), CircleShape)
                     .border(1.dp, Color(0xFF26312C), CircleShape)
-                    .clickable { showPrivacyDialog = true },
+                    .clickable { photoLauncher.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Rounded.HelpOutline,
-                    contentDescription = "Privacy Policy",
-                    tint = Color(0xFF19C37D),
-                    modifier = Modifier.size(22.dp)
-                )
+                val profilePhotoPath by viewModel.userProfilePhotoPath.collectAsState()
+                val bitmap = remember(profilePhotoPath) {
+                    if (!profilePhotoPath.isNullOrEmpty()) {
+                        try {
+                            android.graphics.BitmapFactory.decodeFile(profilePhotoPath)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                }
+
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Person,
+                        contentDescription = "Add Profile Photo",
+                        tint = Color(0xFF19C37D),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 
@@ -1453,6 +1502,185 @@ fun DashboardScreen(
             }
         }
 
+        // Google Sheets Sync Card
+        val googleSheetUrl by viewModel.googleSheetUrl.collectAsState()
+        val isSyncing by viewModel.isGoogleSheetsSyncing.collectAsState()
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1512)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Google Sheets Sync".translate(language),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = if (googleSheetUrl != null) 
+                            "Spreadsheet Linked".translate(language) 
+                            else "No sheet linked yet".translate(language),
+                        fontSize = 11.sp,
+                        color = Color(0xFF9AA59F)
+                    )
+                    if (googleSheetUrl != null) {
+                        Text(
+                            text = "View Sheet".translate(language),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF19C37D),
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clickable {
+                                    try {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(googleSheetUrl))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Could not open browser".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.commitToGoogleSheets(
+                            onSuccess = { url ->
+                                android.widget.Toast.makeText(context, "Expenses committed to Google Sheet successfully!".translate(language), android.widget.Toast.LENGTH_LONG).show()
+                            },
+                            onError = { err ->
+                                android.widget.Toast.makeText(context, err, android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        )
+                    },
+                    enabled = !isSyncing,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF19C37D))
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.Black)
+                    } else {
+                        Text(
+                            text = if (googleSheetUrl != null) "Commit".translate(language) else "Link & Commit".translate(language),
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Receivables Card
+        val unsettledReceivables = splits.filter { !it.isSettled }
+        if (unsettledReceivables.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(16.dp)
+                            .background(Color(0xFF19C37D), RoundedCornerShape(1.5.dp))
+                    )
+                    Text(
+                        text = "Receivables".translate(language),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFFF4F7F5)
+                    )
+                }
+                val totalReceivables = unsettledReceivables.sumOf { it.shareAmount }
+                Text(
+                    text = "Total: ${currency.symbol}${String.format("%,.2f", totalReceivables)}",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFF19C37D)
+                )
+            }
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1512)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    unsettledReceivables.forEach { receivable ->
+                        val sdfRec = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+                        val formattedDate = sdfRec.format(java.util.Date(receivable.transactionDate))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = receivable.contactName,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF4F7F5),
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = formattedDate,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF9AA59F)
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "${currency.symbol}${String.format("%,.2f", receivable.shareAmount)}",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF19C37D),
+                                    fontSize = 14.sp
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .background(Color(0xFF1B241F), RoundedCornerShape(6.dp))
+                                        .border(0.5.dp, Color(0xFF26312C), RoundedCornerShape(6.dp))
+                                        .clickable { viewModel.settleSplit(receivable.id) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = "Settle",
+                                        tint = Color(0xFF19C37D),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Recent Transactions Section
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1536,7 +1764,26 @@ fun DashboardScreen(
                     WalletDetailScreen(
                         walletId = showWalletDetailId!!,
                         viewModel = viewModel,
-                        onBack = { showWalletDetailId = null }
+                        onBack = { showWalletDetailId = null },
+                        onDeleteSuccess = { message ->
+                            coroutineScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = message,
+                                    actionLabel = "Undo".translate(language),
+                                    duration = SnackbarDuration.Long
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    viewModel.undoDeleteWallet(
+                                        onSuccess = {
+                                            android.widget.Toast.makeText(context, "Wallet restored!".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        onError = { err ->
+                                            android.widget.Toast.makeText(context, err, android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -1837,6 +2084,7 @@ fun TransactionsScreen(
     
     var scanStatusMessage by remember { mutableStateOf<String?>(null) }
     var selectedTxForDetails by remember { mutableStateOf<Transaction?>(null) }
+    var showSimulateSmsDialog by remember { mutableStateOf(false) }
     
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
@@ -1960,47 +2208,60 @@ fun TransactionsScreen(
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Button(
-                onClick = {
-                    val permissions = arrayOf(
-                        android.Manifest.permission.READ_SMS,
-                        android.Manifest.permission.READ_CONTACTS
-                    )
-                    val allGranted = permissions.all {
-                        androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==
-                            android.content.pm.PackageManager.PERMISSION_GRANTED
-                    }
-                    if (allGranted) {
-                        viewModel.scanSmsInbox { count, _ ->
-                            scanStatusMessage = "Scan complete. Synced $count new transactions."
-                        }
-                    } else {
-                        smsPermissionLauncher.launch(permissions)
-                    }
-                },
-                enabled = !isSmsScanning,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                if (isSmsScanning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Scanning...", fontSize = 13.sp)
-                } else {
+            var showMenu by remember { mutableStateOf(false) }
+
+            Box {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(
-                        imageVector = Icons.Rounded.Sms,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Options",
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Scan SMS", fontSize = 13.sp)
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = androidx.compose.ui.Modifier.background(Color(0xFF151B18))
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Scan SMS".translate(language), color = Color(0xFFF4F7F5)) },
+                        leadingIcon = { Icon(Icons.Rounded.Sms, contentDescription = null, tint = Color(0xFF19C37D)) },
+                        onClick = {
+                            showMenu = false
+                            val permissions = arrayOf(
+                                android.Manifest.permission.READ_SMS,
+                                android.Manifest.permission.READ_CONTACTS
+                            )
+                            val allGranted = permissions.all {
+                                androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==
+                                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                            }
+                            if (allGranted) {
+                                viewModel.scanSmsInbox { count, _ ->
+                                    scanStatusMessage = "Scan complete. Synced $count new transactions."
+                                }
+                            } else {
+                                smsPermissionLauncher.launch(permissions)
+                            }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add Scan SMS / Simulate".translate(language), color = Color(0xFFF4F7F5)) },
+                        leadingIcon = { Icon(Icons.Rounded.AddComment, contentDescription = null, tint = Color(0xFF19C37D)) },
+                        onClick = {
+                            showMenu = false
+                            showSimulateSmsDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Get Excel Sheet".translate(language), color = Color(0xFFF4F7F5)) },
+                        leadingIcon = { Icon(Icons.Rounded.TableChart, contentDescription = null, tint = Color(0xFF19C37D)) },
+                        onClick = {
+                            showMenu = false
+                            exportTransactionsToExcel(context, transactions)
+                        }
+                    )
                 }
             }
         }
@@ -2379,6 +2640,68 @@ fun TransactionsScreen(
         }
     }
 }
+
+    if (showSimulateSmsDialog) {
+        var smsBody by remember { mutableStateOf("") }
+        Dialog(onDismissRequest = { showSimulateSmsDialog = false }) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+                border = BorderStroke(1.dp, Color(0xFF26312C)),
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Simulate / Add Scan SMS".translate(language),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Enter raw SMS alert text to parse and sync as a transaction:".translate(language),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9AA59F),
+                        textAlign = TextAlign.Center
+                    )
+                    OutlinedTextField(
+                        value = smsBody,
+                        onValueChange = { smsBody = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showSimulateSmsDialog = false },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancel".translate(language))
+                        }
+                        Button(
+                            onClick = {
+                                if (smsBody.isNotBlank()) {
+                                    viewModel.simulateIncomingSms(smsBody)
+                                    android.widget.Toast.makeText(context, "Simulated SMS processed".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                                showSimulateSmsDialog = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Simulate".translate(language))
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     if (showScanChoiceDialog) {
         Dialog(onDismissRequest = { showScanChoiceDialog = false }) {
@@ -2871,6 +3194,46 @@ fun TransactionDetailsDialog(
                 }
             }
         }
+    }
+}
+
+fun exportTransactionsToExcel(context: android.content.Context, transactions: List<Transaction>) {
+    try {
+        val sdfDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val sdfTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        
+        // Create CSV Content
+        val csvBuilder = StringBuilder()
+        csvBuilder.append("ID,Category,Amount,Date,Time,Wallet,Type,Merchant\n")
+        transactions.forEach { tx ->
+            val dateStr = sdfDate.format(java.util.Date(tx.date))
+            val timeStr = sdfTime.format(java.util.Date(tx.date))
+            val walletName = tx.account.replace(",", " ") 
+            val typeStr = if (tx.isIncome) "Income" else "Expense"
+            csvBuilder.append("${tx.id},\"${tx.category.replace("\"", "\"\"")}\",${tx.amount},${dateStr},${timeStr},\"${walletName}\",${typeStr},\"${tx.merchant.replace("\"", "\"\"")}\"\n")
+        }
+        
+        // Save to cache directory to share
+        val fileName = "finklar_transactions_${System.currentTimeMillis()}.csv"
+        val file = java.io.File(context.cacheDir, fileName)
+        file.writeText(csvBuilder.toString())
+        
+        // Share Intent using FileProvider
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "com.example.antigravityfinance.fileprovider",
+            file
+        )
+        
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "FinKlar Transactions Export")
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "Share Transactions Excel (CSV)"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "Export failed: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
     }
 }
 
@@ -4137,6 +4500,113 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Profile Section Card
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101412)),
+            border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                val photoPickerLauncher = rememberLauncherForActivityResult(
+                    contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+                ) { uri ->
+                    if (uri != null) {
+                        try {
+                            val inputStream = context.contentResolver.openInputStream(uri)
+                            val file = java.io.File(context.filesDir, "profile_photo.jpg")
+                            val outputStream = java.io.FileOutputStream(file)
+                            inputStream?.copyTo(outputStream)
+                            inputStream?.close()
+                            outputStream.close()
+                            viewModel.updateUserProfilePhotoPath(file.absolutePath)
+                            android.widget.Toast.makeText(context, "Profile photo updated!".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "Failed to load photo: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(Color(0xFF1B241F), CircleShape)
+                        .border(1.dp, Color(0xFF26312C), CircleShape)
+                        .clickable { photoPickerLauncher.launch("image/*") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val profilePhotoPath by viewModel.userProfilePhotoPath.collectAsState()
+                    val bitmap = remember(profilePhotoPath) {
+                        if (!profilePhotoPath.isNullOrEmpty()) {
+                            try {
+                                android.graphics.BitmapFactory.decodeFile(profilePhotoPath)
+                            } catch (e: Exception) {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Profile Photo",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.Person,
+                            contentDescription = "Add Profile Photo",
+                            tint = Color(0xFF19C37D),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+
+                Column {
+                    val userName by viewModel.userName.collectAsState()
+                    val userEmail by viewModel.userEmail.collectAsState()
+                    val userPhone by viewModel.userPhone.collectAsState()
+                    
+                    Text(
+                        text = userName.ifBlank { "User Profile".translate(language) },
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White
+                    )
+                    Text(
+                        text = userEmail.ifBlank { "No email registered".translate(language) },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF9AA59F)
+                    )
+                    if (userPhone.isNotBlank()) {
+                        Text(
+                            text = userPhone,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF9AA59F)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Change profile photo".translate(language),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF19C37D),
+                        modifier = Modifier.clickable { photoPickerLauncher.launch("image/*") }
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
 
  
         Text("Display Mode".translate(language), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
@@ -4676,10 +5146,10 @@ fun FinancialToolsScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 ToolCard(
-                    title = "Splitwise".translate(language),
-                    subtitle = "Split bills and settle balances".translate(language),
-                    icon = Icons.Rounded.Group,
-                    onClick = { activeTool = "Splitwise" },
+                    title = "Receivables".translate(language),
+                    subtitle = "Track money you are owed by others".translate(language),
+                    icon = Icons.Rounded.Paid,
+                    onClick = { activeTool = "Receivables" },
                     modifier = Modifier.weight(1f)
                 )
                 ToolCard(
@@ -4722,7 +5192,7 @@ fun FinancialToolsScreen(
                         "Safe Spend" -> "Safe Spend".translate(language)
                         "Goals" -> "Savings Goals".translate(language)
                         "Investments" -> "Investment Portfolio".translate(language)
-                        "Splitwise" -> "Splitwise".translate(language)
+                        "Receivables" -> "Receivables".translate(language)
                         "Statistics" -> "Statistics".translate(language)
                         "E-Passbook" -> "Upload E-Passbook".translate(language)
                         else -> ""
@@ -4736,7 +5206,7 @@ fun FinancialToolsScreen(
                     "Safe Spend" -> SafeSpendScreen(viewModel = viewModel)
                     "Goals" -> GoalsScreen(viewModel = viewModel)
                     "Investments" -> InvestmentsScreen(viewModel = viewModel)
-                    "Splitwise" -> SplitwiseScreen(viewModel = viewModel)
+                    "Receivables" -> ReceivablesScreen(viewModel = viewModel)
                     "Statistics" -> StatisticsScreen(viewModel = viewModel)
                     "E-Passbook" -> {
                         val isPdfParsing by viewModel.isPdfParsing.collectAsState()
@@ -5015,17 +5485,16 @@ fun StatisticsScreen(
 
 // --- SPLITWISE SCREEN ---
 @Composable
-fun SplitwiseScreen(
+fun ReceivablesScreen(
     viewModel: FinanceViewModel,
     modifier: Modifier = Modifier
 ) {
     val splits by viewModel.allSplits.collectAsState()
-    val transactions by viewModel.allTransactions.collectAsState()
     val currency by viewModel.currency.collectAsState()
     val themeType by viewModel.themeType.collectAsState()
+    val language by viewModel.language.collectAsState()
     
-    val mockContacts = remember { listOf("Alice", "Bob", "Charlie", "Dave", "Eve") }
-    var showSplitDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
     
     val unsettledSplits = splits.filter { !it.isSettled }
     val totalOwed = unsettledSplits.sumOf { it.shareAmount }
@@ -5064,20 +5533,20 @@ fun SplitwiseScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            Icons.Rounded.Group,
-                            contentDescription = "Splitwise",
+                            Icons.Rounded.Paid,
+                            contentDescription = "Receivables",
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(28.dp)
                         )
                         Text(
-                            "Splitwise Balances",
+                            "Receivables Tracker".translate(language),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
                         )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Total You Are Owed",
+                        "Total You Are Owed".translate(language),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                     )
@@ -5091,16 +5560,16 @@ fun SplitwiseScreen(
         }
         
         Button(
-            onClick = { showSplitDialog = true },
+            onClick = { showAddDialog = true },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Split a Transaction", fontWeight = FontWeight.Bold)
+            Text("Add Receivable".translate(language), fontWeight = FontWeight.Bold)
         }
         
-        Text("Split History", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        Text("Receivables History".translate(language), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         
         if (splits.isEmpty()) {
             Box(
@@ -5108,7 +5577,7 @@ fun SplitwiseScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "No split transactions yet.\nClick above to split your first bill!",
+                    "No receivables recorded yet.\nClick above to add a new person who owes you!".translate(language),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
@@ -5121,6 +5590,8 @@ fun SplitwiseScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                 ) {
+                    val sdfRec = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+                    val formattedDate = sdfRec.format(java.util.Date(split.transactionDate))
                     Row(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -5128,17 +5599,17 @@ fun SplitwiseScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = split.transactionMerchant,
+                                text = split.contactName,
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                             )
                             Text(
-                                text = "Paid: ${currency.symbol}${split.transactionAmount}",
+                                text = "Date: $formattedDate",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${split.contactName} owes you ${currency.symbol}${String.format("%.2f", split.shareAmount)}",
+                                text = "Owes you: ${currency.symbol}${String.format("%.2f", split.shareAmount)}",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = if (split.isSettled) Color.Gray else MaterialTheme.colorScheme.primary
                             )
@@ -5146,7 +5617,7 @@ fun SplitwiseScreen(
                         
                         if (split.isSettled) {
                             Text(
-                                text = "Settled",
+                                text = "Settled".translate(language),
                                 color = Color.Gray,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                             )
@@ -5159,7 +5630,7 @@ fun SplitwiseScreen(
                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             ) {
-                                Text("Settle Up", fontSize = 12.sp)
+                                Text("Settle Up".translate(language), fontSize = 12.sp)
                             }
                         }
                     }
@@ -5168,194 +5639,123 @@ fun SplitwiseScreen(
         }
     }
     
-    if (showSplitDialog) {
-        SplitTransactionDialog(
-            transactions = transactions.filter { !it.isIncome && it.status == TransactionStatus.CONFIRMED },
-            mockContacts = mockContacts,
+    if (showAddDialog) {
+        AddReceivableDialog(
             currencySymbol = currency.symbol,
-            onDismiss = { showSplitDialog = false },
-            onConfirmSplit = { transaction, contacts ->
-                viewModel.splitTransaction(transaction, contacts)
-                showSplitDialog = false
+            language = language,
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, amount, date ->
+                viewModel.addDirectReceivable(name, amount, date)
+                showAddDialog = false
             }
         )
     }
 }
 
 @Composable
-fun SplitTransactionDialog(
-    transactions: List<Transaction>,
-    mockContacts: List<String>,
+fun AddReceivableDialog(
     currencySymbol: String,
+    language: com.example.antigravityfinance.data.model.LanguageType,
     onDismiss: () -> Unit,
-    onConfirmSplit: (Transaction, List<String>) -> Unit
+    onConfirm: (name: String, amount: Double, date: Long) -> Unit
 ) {
-    var selectedTx by remember { mutableStateOf<Transaction?>(null) }
-    var selectedContacts by remember { mutableStateOf(setOf<String>()) }
+    var name by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
     
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendar = remember { java.util.Calendar.getInstance() }
+    var selectedDate by remember { mutableStateOf(calendar.timeInMillis) }
+    val sdf = remember { java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151B18)),
+            border = BorderStroke(1.dp, Color(0xFF26312C)),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 500.dp)
                 .padding(16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Split a Bill",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    text = "Add Receivable".translate(language),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                if (selectedTx == null) {
-                    Text("Select a transaction:", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (transactions.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(100.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No recent expenses to split.")
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            transactions.forEach { tx ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clickable { selectedTx = tx },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text(tx.merchant, fontWeight = FontWeight.SemiBold)
-                                            Text(tx.category, style = MaterialTheme.typography.bodySmall)
-                                        }
-                                        Text(
-                                            "${currencySymbol}${tx.amount}",
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Person's Name".translate(language)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it },
+                    label = { Text("Amount".translate(language)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        val datePickerDialog = android.app.DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                val cal = java.util.Calendar.getInstance()
+                                cal.set(year, month, dayOfMonth)
+                                selectedDate = cal.timeInMillis
+                            },
+                            calendar.get(java.util.Calendar.YEAR),
+                            calendar.get(java.util.Calendar.MONTH),
+                            calendar.get(java.util.Calendar.DAY_OF_MONTH)
+                        )
+                        datePickerDialog.show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF19C37D))
+                ) {
+                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Date: ${sdf.format(java.util.Date(selectedDate))}")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text("Cancel")
-                        }
+                        Text("Cancel".translate(language))
                     }
-                } else {
-                    val tx = selectedTx!!
-                    Text(
-                        "Split ${tx.merchant} (${currencySymbol}${tx.amount})",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Text("Select friends to split with:", style = MaterialTheme.typography.titleSmall)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
+                    Button(
+                        onClick = {
+                            val amount = amountText.toDoubleOrNull() ?: 0.0
+                            if (name.isNotBlank() && amount > 0.0) {
+                                onConfirm(name.trim(), amount, selectedDate)
+                            } else {
+                                android.widget.Toast.makeText(context, "Please enter name and amount".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = name.isNotBlank() && amountText.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        mockContacts.forEach { contact ->
-                            val isChecked = selectedContacts.contains(contact)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        selectedContacts = if (isChecked) {
-                                            selectedContacts - contact
-                                        } else {
-                                            selectedContacts + contact
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        selectedContacts = if (checked) {
-                                            selectedContacts + contact
-                                        } else {
-                                            selectedContacts - contact
-                                        }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(contact, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                    
-                    if (selectedContacts.isNotEmpty()) {
-                        val totalPeople = selectedContacts.size + 1
-                        val share = tx.amount / totalPeople
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    "Split: You + ${selectedContacts.size} friends",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "Each share: $currencySymbol${String.format("%,.2f", share)}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        TextButton(onClick = { selectedTx = null; selectedContacts = emptySet() }) {
-                            Text("Back")
-                        }
-                        Row {
-                            TextButton(onClick = onDismiss) {
-                                Text("Cancel")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { onConfirmSplit(tx, selectedContacts.toList()) },
-                                enabled = selectedContacts.isNotEmpty()
-                            ) {
-                                Text("Split")
-                            }
-                        }
+                        Text("Add".translate(language))
                     }
                 }
             }
