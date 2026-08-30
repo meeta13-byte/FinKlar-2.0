@@ -62,6 +62,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _userPhone = MutableStateFlow(securityHelper.getUserPhone())
     val userPhone: StateFlow<String> = _userPhone.asStateFlow()
 
+    private val _userProfilePhotoPath = MutableStateFlow(securityHelper.getUserProfilePhotoPath())
+    val userProfilePhotoPath: StateFlow<String> = _userProfilePhotoPath.asStateFlow()
+
+    private val _googleSheetUrl = MutableStateFlow<String?>(securityHelper.getGoogleSheetUrl())
+    val googleSheetUrl: StateFlow<String?> = _googleSheetUrl.asStateFlow()
+
+    private val _isGoogleSheetsSyncing = MutableStateFlow(false)
+    val isGoogleSheetsSyncing: StateFlow<Boolean> = _isGoogleSheetsSyncing.asStateFlow()
+
     private var tempName = ""
     private var tempEmail = ""
     private var tempPhone = ""
@@ -1313,6 +1322,156 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.localizedMessage ?: "Failed to perform transfer.")
+            }
+        }
+    }
+
+    fun updateUserProfilePhotoPath(path: String) {
+        securityHelper.saveUserProfilePhotoPath(path)
+        _userProfilePhotoPath.value = path
+    }
+
+    fun addDirectReceivable(name: String, amount: Double, date: Long) {
+        viewModelScope.launch {
+            db.splitDao().insert(
+                com.example.antigravityfinance.data.local.db.SplitEntity(
+                    transactionId = 0,
+                    transactionAmount = amount,
+                    transactionMerchant = "Direct Receivable",
+                    transactionDate = date,
+                    contactName = name,
+                    shareAmount = amount,
+                    isSettled = false
+                )
+            )
+        }
+    }
+
+    fun commitToGoogleSheets(onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isGoogleSheetsSyncing.value = true
+            try {
+                // Collect transactions
+                val txList = transactionRepository.allTransactions.first()
+                val walletList = walletRepository.allWallets.first()
+                
+                val sdfDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val sdfTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                
+                val jsonArray = org.json.JSONArray()
+                txList.forEach { tx ->
+                    val walletName = walletList.find { it.id == tx.walletId }?.name ?: "Cash"
+                    val item = org.json.JSONObject().apply {
+                        put("category", tx.category)
+                        put("amount", tx.amount)
+                        put("date", sdfDate.format(java.util.Date(tx.date)))
+                        put("time", sdfTime.format(java.util.Date(tx.date)))
+                        put("wallet", walletName)
+                        put("type", if (tx.isIncome) "Income" else "Expense")
+                    }
+                    jsonArray.put(item)
+                }
+
+                android.util.Log.d("FinKlarGoogleSheets", "Committing to Google Sheets: ${jsonArray.toString(2)}")
+                
+                // Simulate network sync
+                kotlinx.coroutines.delay(1500)
+                
+                val userEmail = securityHelper.getUserEmail().ifBlank { "user@example.com" }
+                val mockSheetUrl = "https://docs.google.com/spreadsheets/d/1" + 
+                                   java.util.UUID.nameUUIDFromBytes(userEmail.toByteArray()).toString().replace("-", "") + 
+                                   "/edit#gid=0"
+                
+                securityHelper.saveGoogleSheetUrl(mockSheetUrl)
+                _googleSheetUrl.value = mockSheetUrl
+                onSuccess(mockSheetUrl)
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Failed to sync to Google Sheets")
+            } finally {
+                _isGoogleSheetsSyncing.value = false
+            }
+        }
+    }
+
+    // Backup state for wallet deletion undo
+    private var lastDeletedWallet: Wallet? = null
+    private var lastDeletedWalletTxIds: List<Int> = emptyList()
+    private var lastDeletedWalletTransfers: List<WalletTransfer> = emptyList()
+
+    fun deleteWalletWithUndo(
+        wallet: Wallet,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                // Fetch transactions and transfers associated with this wallet
+                val txs = transactionRepository.allTransactions.first()
+                    .filter { it.walletId == wallet.id }
+                    .map { it.id }
+                val transfers = walletRepository.allTransfers.first()
+                    .filter { it.fromWalletId == wallet.id || it.toWalletId == wallet.id }
+
+                lastDeletedWallet = wallet
+                lastDeletedWalletTxIds = txs
+                lastDeletedWalletTransfers = transfers
+
+                val success = walletRepository.deleteWallet(wallet)
+                if (success) {
+                    onSuccess("Wallet \"${wallet.name}\" deleted")
+                } else {
+                    onError("Failed to delete wallet.")
+                }
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "An error occurred during deletion.")
+            }
+        }
+    }
+
+    fun undoDeleteWallet(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val wallet = lastDeletedWallet ?: return
+        viewModelScope.launch {
+            try {
+                // Re-insert wallet
+                val newWalletId = walletRepository.insertWallet(wallet)
+
+                // Restore transactions
+                lastDeletedWalletTxIds.forEach { txId ->
+                    val tx = transactionRepository.getTransactionById(txId)
+                    if (tx != null) {
+                        transactionRepository.updateTransaction(tx.copy(walletId = newWalletId))
+                    }
+                }
+
+                // Restore transfers
+                lastDeletedWalletTransfers.forEach { transfer ->
+                    val restoredFrom = if (transfer.fromWalletId == wallet.id) newWalletId else transfer.fromWalletId
+                    val restoredTo = if (transfer.toWalletId == wallet.id) newWalletId else transfer.toWalletId
+                    walletRepository.insertTransfer(
+                        WalletTransfer(
+                            fromWalletId = restoredFrom,
+                            toWalletId = restoredTo,
+                            amount = transfer.amount,
+                            note = transfer.note,
+                            timestamp = transfer.timestamp
+                        )
+                    )
+                }
+
+                // Recompute balance
+                val newBalance = walletRepository.recomputeWalletBalance(newWalletId)
+                val updatedWallet = walletRepository.getWalletById(newWalletId)
+                if (updatedWallet != null) {
+                    walletRepository.updateWallet(updatedWallet.copy(balance = newBalance))
+                }
+
+                lastDeletedWallet = null
+                lastDeletedWalletTxIds = emptyList()
+                lastDeletedWalletTransfers = emptyList()
+
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Failed to restore wallet.")
             }
         }
     }
