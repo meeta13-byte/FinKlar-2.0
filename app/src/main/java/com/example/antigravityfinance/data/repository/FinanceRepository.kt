@@ -38,6 +38,10 @@ class TransactionRepository(
         walletDao.update(wallet.copy(balance = computedBalance))
     }
 
+    suspend fun updateTransaction(transaction: Transaction) {
+        transactionDao.update(TransactionEntity.fromDomain(transaction))
+    }
+
     suspend fun insertTransaction(transaction: Transaction): Int {
         val targetWalletId = transaction.walletId ?: walletDao.getDefaultWallet()?.id
         val finalTransaction = transaction.copy(walletId = targetWalletId)
