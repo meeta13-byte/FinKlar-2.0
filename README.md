@@ -1,76 +1,99 @@
 # FinKlar 2.0
 
-FinKlar 2.0 is a professional, offline-first personal finance and money management mobile application designed for secure, localized banking analysis. Built with Jetpack Compose, Material 3, and Kotlin, the application integrates SQLite encryption, automatic transaction detection via SMS parsing, Gemini-powered OCR receipt extraction, and an intelligent financial chatbot assistant.
+FinKlar 2.0 is an offline-first personal finance manager for Android. It tracks transactions, budgets, savings goals, wallets and investments locally in an encrypted database, with automatic transaction detection from SMS, receipt OCR, voice input, and an AI financial assistant.
+
+Package: `com.example.antigravityfinance` | Min SDK 24, Target/Compile SDK 36, JDK 17
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-*   **🔒 Encrypted Local Storage (SQLCipher)**: All transactions, budgets, savings goals, and investments are persisted locally inside an encrypted SQLite database using **Room + SQLCipher** (256-bit passphrase key derived via secure Keystore providers).
-*   **📱 Secure PIN Lock Gate**: An interactive, security-wrapped custom PIN pad shields the app workspace on startup.
-*   **💬 Conversational AI Assistant**: An intelligent financial chatbot answers queries (*"how much did I spend on food this month?"*, *"predict budget overruns"*) using local rules and context mapping, or queries Gemini 1.5 Flash when developer keys are configured.
-*   **📩 SMS Transaction Sync**: Auto-syncs transactions from device SMS notifications. The offline regex engine extracts amount, merchant, and income vs expense flags and stores bank balance entries.
-*   **🧾 Smart OCR Receipt Scanner**: Scan receipt screenshots using the built-in Gemini Vision analyzer. It automatically detects merchant, amounts, and categories.
-*   **⚠️ Smart Duplicate Warning Popup**: Runs an immediate similarity check (amount, merchant initials, and time delta) before inserting scanned receipts to prevent duplicate bookkeeping.
-*   **🔥 Daily Savings Goal Streaks**: Track daily contributions on goal progress cards with a flame/fire icon indicator. Streaks are automatically calculated based on daily contribution intervals.
-*   **📈 Investments commitments & SIP Alerts**: Manage mutual funds, stocks, and SIP portfolios. An active SIP low-balance monitor compares the synced bank balance to the monthly SIP total and triggers alerts to prevent failed transaction charges.
-*   **🎨 Dynamic Custom Themes**: Instantly toggle between **Dynamic Theme** (vibrant gradients, rounded borders) and **Professional Theme** (clean slates, executive slate Navy) with custom accent colors and system Light/Dark modes.
-*   **🌍 Restricted Localization**: Supported settings languages are strictly restricted to English and Hindi.
+* **Encrypted local storage:** Room + SQLCipher. Transactions, budgets, goals, investments, wallets stored on-device.
+* **PIN lock gate:** Custom PIN pad on startup, backed by `SecurityHelper` + EncryptedSharedPreferences.
+* **AI assistant:** Local rule-based answers + Gemini 1.5 Flash when an API key is configured (`AiAssistantService`).
+* **Voice input:** Audio recording (`AudioRecorder`) + Sarvam `saaras:v3` speech-to-text (`SarvamService`).
+* **SMS sync:** `TransactionSmsReceiver` + `SmsInboxScanner` + regex `SmsDetectionModule` extract amount / merchant / income-vs-expense. Deleting an SMS purges the mirrored entry on next sync.
+* **Receipt OCR:** `OcrScanner` — mock receipts for demo + real Gemini Vision path via OkHttp (`scanReceiptReal`). Duplicate check (amount + merchant + time window) before insert.
+* **Wallets, goals & streaks:** Multi-wallet transfers (`WalletRepository`), daily goal streaks, SIP / investment tracking with low-balance alerts.
+* **Themes & localization:** Material 3 Dynamic vs Professional themes, light/dark, English + Hindi only.
+* **Auth backend (optional):** Firebase Cloud Functions + Twilio OTP (`sendOTP` / `verifyOTP`, 6-digit, 5-min expiry, Firestore `otps` + `users` collections).
 
----
+## Tech Stack
 
-## 🛠️ Technology Stack
+* **UI:** Jetpack Compose (BOM 2026.03.01), Material 3, Navigation3, Activity Compose
+* **Language / build:** Kotlin 2.3.20, AGP 9.0.1, KSP 2.3.0, kotlinx-serialization-json 1.6.3
+* **Architecture:** MVVM, Repository pattern (`TransactionRepository`, `BudgetRepository`, `GoalRepository`, `InvestmentRepository`, `WalletRepository`), Kotlin Flow/Coroutines
+* **Database:** Room 2.8.4 + `sqlcipher-android` 4.6.1, `security-crypto`, `biometric`
+* **AI / network:** `generativeai:0.7.0` (Gemini), OkHttp 4.12.0, Sarvam STT REST
+* **Backend:** Firebase (`finklar-3c10d`, see `app/google-services.json`), Cloud Functions Node 18, `firebase-admin@11`, `firebase-functions@4`, `twilio@4`
+* **Tests:** JUnit4, coroutines-test, Espresso, Compose UI Test (`WalletTest`, `SmsDetectionModuleTest`, `MainScreenViewModelTest`)
 
-*   **UI/UX**: Jetpack Compose, Material Design 3 (M3)
-*   **Database**: Android Room Persistence Library + SQLCipher (16 KB page-size aligned)
-*   **Processor & Compilation**: KSP2 (Kotlin Symbol Processing), Kotlin 2.3+
-*   **AI Models**: Gemini 1.5 Flash (via Google AI Client SDK)
-*   **Architecture**: MVVM (Model-View-ViewModel), Repository Pattern, Offline-First, Flow Streams
+Project layout:
 
----
+```
+app/src/main/java/com/example/antigravityfinance/
+  data/model/ data/local/db/ data/repository/
+  service/ai/ service/ocr/ service/sms/ service/audio/ service/security/
+  ui/screens/ ui/components/ ui/viewmodel/ theme/
+  MainActivity.kt Navigation.kt
+firebase_backend/functions/  # index.js, package.json
+gradle/libs.versions.toml
+```
 
-## ⚙️ Setup and Installation
+## Setup
 
-### Prerequisites
-*   Android Studio Ladybug (or newer)
-*   Android SDK (API 34+)
-*   Java Development Kit (JDK) 17+
+### 1. Prerequisites
 
-### Step-by-Step Guide
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/your-username/AntigravityFinance.git
-    cd AntigravityFinance
-    ```
-2.  **Open in Android Studio**:
-    Select **File -> Open** and select the root directory of the project.
-3.  **Configure API Keys (Optional)**:
-    Open the app, navigate to **Settings**, and insert your Google Gemini API Key under Developer Options to enable advanced AI chatbot queries and real OCR scanning.
-4.  **Build Project**:
-    Press **Sync Project with Gradle Files** inside Android Studio, then build the APK using `Build -> Build Bundle(s) / APK(s) -> Build APK(s)`.
+* Android Studio Ladybug or newer
+* Android SDK API 34+
+* JDK 17+
 
----
+### 2. Android app
 
-## 🧪 Testing
+```bash
+git clone https://github.com/your-username/AntigravityFinance.git
+cd AntigravityFinance
+```
 
-The repository contains unit tests validating the regular expression SMS parser, category sorting rules, and viewModel streams.
+Open the root folder in Android Studio → **Sync Project with Gradle Files**.
 
-To run automated checks, use the Gradle commands:
+API keys (never committed — loaded from `local.properties` or env in `app/build.gradle.kts`):
 
-*   **Compile Debug Sources**:
-    ```bash
-    ./gradlew compileDebugSources
-    ```
-*   **Run Unit Tests**:
-    ```bash
-    ./gradlew testDebugUnitTest
-    ```
+```properties
+# local.properties (gitignored)
+GEMINI_API_KEY=your_gemini_key
+SARVAM_API_KEY=your_sarvam_key   # if used via Settings / Developer Options
+```
 
----
+Alternatively set `GEMINI_API_KEY` as an environment variable. You can also paste the Gemini key in-app under Settings → Developer Options.
 
-## 🔒 Security & Privacy Model
+Build APK: `Build → Build Bundle(s) / APK(s) → Build APK(s)`.
 
-FinKlar is designed with privacy as a priority:
-1.  **Offline-First**: None of your financial records are uploaded to cloud servers. All analytics are computed on-device.
-2.  **Passphrase Entropy**: Database decryption keys are generated using cryptographically secure random number generators and stored inside encrypted Android Shared Preferences.
-3.  **No Unverified Outputs**: Scanned SMS logs serve strictly as a mirror. If an SMS is deleted from the device inbox, the application purges the corresponding transaction on the next sync, keeping records clean and verified.
+### 3. OTP backend (optional)
+
+```bash
+cd firebase_backend/functions
+npm install
+# configure Twilio (either method):
+firebase functions:config:set twilio.sid="..." twilio.token="..." twilio.phone="..."
+# or
+export TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_PHONE_NUMBER=...
+npm run serve   # emulator
+npm run deploy  # deploy --only functions
+```
+
+Without Twilio credentials `sendOTP` runs in mock mode and returns `mockOtp` for testing.
+
+## Testing
+
+```bash
+./gradlew compileDebugSources
+./gradlew testDebugUnitTest
+```
+
+## Security & Privacy
+
+1. Offline-first: financial records stay on-device; analytics computed locally.
+2. DB passphrase generated with secure RNG, stored in encrypted prefs / Keystore.
+3. Firebase is used only for OTP verification metadata (`otps`, `users`), not for financial data.
+4. Do not commit `local.properties`, `google-services.json` secrets, Twilio creds, or Gemini/Sarvam keys.
