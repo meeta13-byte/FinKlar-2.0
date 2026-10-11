@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "519641460489",
-    "project_id": "finklar-3c10d",
-    "storage_bucket": "finklar-3c10d.firebasestorage.app"
+    "project_number": "309770003057",
+    "project_id": "finklar-b84a9",
+    "storage_bucket": "finklar-b84a9.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:519641460489:android:886ef25266eb7a6182edd8",
+        "mobilesdk_app_id": "1:309770003057:android:dc6f60937de2dacdf3b1d0",
         "android_client_info": {
           "package_name": "com.example.antigravityfinance"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDcpVn4IZeQBH9bo1rP_kto0ZxSMk7SETM"
+          "current_key": "AIzaSyDRXR5vMnhqzZHQatBqUCMbEXYz6cxl6hQ"
         }
       ],
       "services": {

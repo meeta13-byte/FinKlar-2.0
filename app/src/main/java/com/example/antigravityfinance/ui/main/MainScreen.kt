@@ -81,7 +81,7 @@ fun MainScreen(
         ) {
             if (showSplash) {
                 PrivacySplashView(language = language)
-            } else if (!isRegistered) {
+            } else if (!isRegistered && !viewModel.isFirebaseUserSignedIn) {
                 OnboardingScreen(viewModel = viewModel)
             } else if (isPinSet && isAuthRequired) {
                 // Secure Authentication Lock Gate

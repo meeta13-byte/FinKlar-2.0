@@ -16,7 +16,7 @@ Package: `com.example.antigravityfinance` | Min SDK 24, Target/Compile SDK 36, J
 * **Receipt OCR:** `OcrScanner` — mock receipts for demo + real Gemini Vision path via OkHttp (`scanReceiptReal`). Duplicate check (amount + merchant + time window) before insert.
 * **Wallets, goals & streaks:** Multi-wallet transfers (`WalletRepository`), daily goal streaks, SIP / investment tracking with low-balance alerts.
 * **Themes & localization:** Material 3 Dynamic vs Professional themes, light/dark, English + Hindi only.
-* **Auth backend (optional):** Firebase Cloud Functions + Twilio OTP (`sendOTP` / `verifyOTP`, 6-digit, 5-min expiry, Firestore `otps` + `users` collections).
+* **Phone sign-in:** Firebase Phone Authentication (`PhoneAuthViewModel`) — SMS code, auto-verification, 60s timeout, and resend.
 
 ## Tech Stack
 
@@ -25,7 +25,8 @@ Package: `com.example.antigravityfinance` | Min SDK 24, Target/Compile SDK 36, J
 * **Architecture:** MVVM, Repository pattern (`TransactionRepository`, `BudgetRepository`, `GoalRepository`, `InvestmentRepository`, `WalletRepository`), Kotlin Flow/Coroutines
 * **Database:** Room 2.8.4 + `sqlcipher-android` 4.6.1, `security-crypto`, `biometric`
 * **AI / network:** `generativeai:0.7.0` (Gemini), OkHttp 4.12.0, Sarvam STT REST
-* **Backend:** Firebase (`finklar-3c10d`, see `app/google-services.json`), Cloud Functions Node 18, `firebase-admin@11`, `firebase-functions@4`, `twilio@4`
+* **Auth:** Firebase Phone Auth via `firebase-auth` (version from Firebase BoM `35.0.0`), project `finklar-b84a9` (see `app/google-services.json`)
+* **Backend:** Firebase project `finklar-b84a9`. The custom Twilio OTP Cloud Functions are **no longer used**; sign-in is Firebase Phone Auth. The legacy functions remain in `firebase_backend/functions/` for reference only.
 * **Tests:** JUnit4, coroutines-test, Espresso, Compose UI Test (`WalletTest`, `SmsDetectionModuleTest`, `MainScreenViewModelTest`)
 
 Project layout:
@@ -69,33 +70,24 @@ Alternatively set `GEMINI_API_KEY` as an environment variable. You can also past
 
 Build APK: `Build → Build Bundle(s) / APK(s) → Build APK(s)`.
 
-### 3. OTP backend (optional)
+### 3. Phone sign-in (Firebase Phone Auth)
 
-```bash
-cd firebase_backend/functions
-npm install
-# configure Twilio (either method):
-firebase functions:config:set twilio.sid="..." twilio.token="..." twilio.phone="..."
-# or
-export TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_PHONE_NUMBER=...
-npm run serve   # emulator
-npm run deploy  # deploy --only functions
-```
+Sign-in uses **Firebase Phone Authentication** — no custom backend and no Twilio.
 
-Without Twilio credentials `sendOTP` returns `503` and issues no code — there is no mock/test mode.
+1. `app/google-services.json` must point at your Firebase project. This file is currently tracked in git; see the security note below.
+2. In the Firebase console, enable **Authentication → Sign-in method → Phone**.
+3. Register the app's SHA-1 **and** SHA-256 signing fingerprints (both debug and release) under **Project settings → Your apps**.
+4. Build and run; the onboarding screen asks for an E.164 phone number (default `+91`) and a 6-digit code.
 
-Both endpoints are `POST`-only and accept only E.164 phone numbers. Configure the
-allowed browser origins (comma-separated) and the code-signing pepper:
+Phone numbers must be entered in E.164 format. For testing without spending SMS credit, add a test number under **Authentication → Phone → Test numbers** in the Firebase console.
 
-```bash
-export OTP_PEPPER="$(openssl rand -hex 32)"   # must be identical across all instances
-export ALLOWED_ORIGINS="https://your-web-app.example"
-```
+The user identifier is the Firebase Auth **uid** (`FirebaseAuth.getInstance().currentUser?.uid`), which replaces the phone number anywhere data was previously keyed by it. `FinanceViewModel.userId` exposes it, and it is stored on sign-in by `SecurityHelper`.
 
-Codes are never stored or logged in plaintext, are rate-limited per phone number
-and per IP, expire after 5 minutes, and lock the number after 5 failed attempts.
-Use `node firebase_backend/functions/_audit_harness.js` to exercise these
-behaviours locally against stubbed Firebase/Twilio.
+#### Optional: any custom Cloud Functions
+
+If you later call your own backend, update `FUNCTIONS_BASE_URL` in `FinanceViewModel.kt`. It still points at the **old** project `finklar-3c10d` and needs your new project's values.
+
+> The legacy Twilio OTP functions in `firebase_backend/functions/` are no longer called by the app. They can be deleted once you are sure you do not need them.
 
 ## Testing
 
@@ -108,5 +100,5 @@ behaviours locally against stubbed Firebase/Twilio.
 
 1. Offline-first: financial records stay on-device; analytics computed locally.
 2. DB passphrase generated with secure RNG, stored in encrypted prefs / Keystore.
-3. Firebase is used only for OTP verification metadata (`otps`, `users`), not for financial data.
-4. Do not commit `local.properties`, `google-services.json` secrets, Twilio creds, or Gemini/Sarvam keys.
+3. Firebase is used only for Phone Authentication (the account and its uid); financial data never leaves the device.
+4. Do not commit `local.properties`, `google-services.json`, or Gemini/Sarvam keys. **Note: `app/google-services.json` is currently tracked in git and contains a live Firebase API key — see the security note in the handover summary.**

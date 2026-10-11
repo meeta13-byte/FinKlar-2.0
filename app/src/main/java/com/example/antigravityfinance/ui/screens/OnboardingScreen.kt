@@ -27,6 +27,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.antigravityfinance.ui.viewmodel.FinanceViewModel
+import com.example.antigravityfinance.ui.viewmodel.OtpState
+import com.example.antigravityfinance.ui.viewmodel.PhoneAuthViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 
 enum class OnboardingPhase {
     ENTER_DETAILS,
@@ -40,6 +46,7 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     var phase by remember { mutableStateOf(OnboardingPhase.ENTER_DETAILS) }
 
     // Form inputs
@@ -51,15 +58,37 @@ fun OnboardingScreen(
     var agreedToTerms by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
 
-    val isSending by viewModel.isOtpSending.collectAsState()
-    val isVerifying by viewModel.isOtpVerifying.collectAsState()
+    val phoneAuth: PhoneAuthViewModel = viewModel()
+    val otpState by phoneAuth.state.collectAsState()
     val currentLanguage by viewModel.language.collectAsState()
+
+    val isSending = otpState is OtpState.Sending
+    val isVerifying = otpState is OtpState.Verifying
 
     // Error states
     var nameError by remember { mutableStateOf(false) }
     var emailError by remember { mutableStateOf(false) }
     var phoneError by remember { mutableStateOf(false) }
     var otpError by remember { mutableStateOf(false) }
+
+    // Errors surfaced by Firebase Phone Auth (wrong code, too many requests, etc).
+    val otpMessage = (otpState as? OtpState.Error)?.message
+
+    LaunchedEffect(otpState) {
+        when (val s = otpState) {
+            is OtpState.CodeSent -> {
+                phase = OnboardingPhase.VERIFY_OTP
+                otpError = false
+            }
+            is OtpState.Success -> viewModel.completeRegistration(
+                uid = s.uid,
+                name = name.trim(),
+                email = email.trim(),
+                phone = "+91" + phone.trim()
+            )
+            else -> Unit
+        }
+    }
 
     val gradientBrush = Brush.linearGradient(
         colors = listOf(
@@ -448,6 +477,17 @@ fun OnboardingScreen(
 
                                 Spacer(modifier = Modifier.height(24.dp))
 
+                                // Send failures happen on this screen, so surface them here too -
+                                // otherwise the button just appears to do nothing.
+                                if (otpMessage != null) {
+                                    Text(
+                                        text = otpMessage,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -464,21 +504,14 @@ fun OnboardingScreen(
 
                                     Button(
                                         onClick = {
-                                            viewModel.sendOtp(
-                                                name = name.trim(),
-                                                email = email.trim(),
-                                                phone = "+91" + phone.trim(),
-                                                onSuccess = {
-                                                    Toast.makeText(context, "OTP Sent successfully!".translate(currentLanguage), Toast.LENGTH_SHORT).show()
-                                                    phase = OnboardingPhase.VERIFY_OTP
-                                                },
-                                                onError = { err ->
-                                                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                                                    phase = OnboardingPhase.VERIFY_OTP
-                                                }
-                                            )
+                                            val act = activity
+                                            if (act == null) {
+                                                Toast.makeText(context, "Could not start verification.", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                phoneAuth.sendCode(act, "+91" + phone.trim())
+                                            }
                                         },
-                                        enabled = !isSending,
+                                        enabled = !isSending && activity != null,
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier
                                             .weight(1.5f)
@@ -510,7 +543,11 @@ fun OnboardingScreen(
                                     textAlign = TextAlign.Start
                                 )
                                 Text(
-                                    text = "${"We sent a 6-digit OTP code to".translate(currentLanguage)} +91$phone. ${"Please enter it below to confirm your phone number.".translate(currentLanguage)}",
+                                    text = if (otpState is OtpState.TimedOut) {
+                                        "Automatic code detection timed out. Enter the 6-digit code manually, or resend."
+                                    } else {
+                                        "${"We sent a 6-digit OTP code to".translate(currentLanguage)} +91$phone. ${"Please enter it below to confirm your phone number.".translate(currentLanguage)}"
+                                    },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     modifier = Modifier.fillMaxWidth(),
@@ -518,6 +555,15 @@ fun OnboardingScreen(
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
+
+                                if (otpMessage != null) {
+                                    Text(
+                                        text = otpMessage,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
 
                                 OutlinedTextField(
                                     value = otp,
@@ -548,13 +594,10 @@ fun OnboardingScreen(
 
                                     TextButton(
                                         onClick = {
-                                            viewModel.sendOtp(name, email, "+91$phone", {
-                                                Toast.makeText(context, "OTP Resent successfully".translate(currentLanguage), Toast.LENGTH_SHORT).show()
-                                            }, { err ->
-                                                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                                            })
+                                            val act = activity
+                                            if (act != null) phoneAuth.resendCode(act)
                                         },
-                                        enabled = !isSending
+                                        enabled = !isSending && activity != null
                                     ) {
                                         Text("Resend Code".translate(currentLanguage))
                                     }
@@ -566,15 +609,7 @@ fun OnboardingScreen(
                                     onClick = {
                                         otpError = otp.trim().length != 6
                                         if (!otpError) {
-                                            viewModel.verifyOtp(
-                                                otp = otp.trim(),
-                                                onSuccess = {
-                                                    Toast.makeText(context, "Registration Verified!".translate(currentLanguage), Toast.LENGTH_SHORT).show()
-                                                },
-                                                onError = { err ->
-                                                    Toast.makeText(context, "${"Error:".translate(currentLanguage)} $err. ${"Try bypass code '123456'.".translate(currentLanguage)}", Toast.LENGTH_LONG).show()
-                                                }
-                                            )
+                                            phoneAuth.verifyCode(otp.trim())
                                         } else {
                                             Toast.makeText(context, "OTP must be exactly 6 digits".translate(currentLanguage), Toast.LENGTH_SHORT).show()
                                         }
@@ -606,41 +641,14 @@ fun OnboardingScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Bypass/Demo option
-                Text(
-                    text = "Bypass verification for local offline development / testing",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        viewModel.bypassRegistrationForDemo()
-                        Toast.makeText(context, "Demo profile loaded successfully!", Toast.LENGTH_SHORT).show()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.secondary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Rounded.DeveloperMode, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Bypass with Demo Account")
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(
-                    text = "Note: You can also enter OTP '123456' to simulate a successful backend verification.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
+}
+
+/** Resolves the hosting Activity, which PhoneAuthOptions.setActivity() requires. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

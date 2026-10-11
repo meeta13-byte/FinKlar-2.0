@@ -75,6 +75,9 @@ class WalletTest {
         override suspend fun getTransactionCount(walletId: Int): Int {
             return transactions.count { it.walletId == walletId }
         }
+
+        override suspend fun getAllWalletsList(): List<WalletEntity> =
+            wallets.sortedBy { it.createdAt }
     }
 
     class FakeWalletTransferDao : WalletTransferDao {
@@ -93,6 +96,10 @@ class WalletTest {
 
         override fun getTransfersForWallet(walletId: Int): Flow<List<WalletTransferEntity>> = flow {
             emit(transfers.filter { it.fromWalletId == walletId || it.toWalletId == walletId })
+        }
+
+        override suspend fun deleteTransfersForWallet(walletId: Int) {
+            transfers.removeIf { it.fromWalletId == walletId || it.toWalletId == walletId }
         }
     }
 
@@ -119,6 +126,22 @@ class WalletTest {
             list.clear()
         }
         override fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>> = flow { emit(list.filter { it.walletId == walletId }) }
+
+        override suspend fun moveTransactionsToWallet(oldWalletId: Int, newWalletId: Int) {
+            for (i in list.indices) {
+                if (list[i].walletId == oldWalletId) {
+                    list[i] = list[i].copy(walletId = newWalletId)
+                }
+            }
+        }
+
+        override suspend fun clearWalletForTransactions(walletId: Int) {
+            for (i in list.indices) {
+                if (list[i].walletId == walletId) {
+                    list[i] = list[i].copy(walletId = null)
+                }
+            }
+        }
     }
 
     @Test
@@ -146,8 +169,8 @@ class WalletTest {
 
     @Test
     fun testTransferAtomicity_success() = runBlocking {
-        val walletDao = FakeWalletDao()
         val transferDao = FakeWalletTransferDao()
+        val walletDao = FakeWalletDao().also { it.transfers = transferDao.transfers }
         val transactionDao = FakeTransactionDao()
         val repository = WalletRepository(walletDao, transferDao, transactionDao)
 
@@ -269,8 +292,8 @@ class WalletTest {
 
     @Test
     fun testShiftTransactionWallet() = runBlocking {
-        val walletDao = FakeWalletDao()
         val transactionDao = FakeTransactionDao()
+        val walletDao = FakeWalletDao().also { it.transactions = transactionDao.list }
         val budgetDao = object : BudgetDao {
             val budgets = mutableListOf<BudgetEntity>()
             override fun getAllBudgets(): Flow<List<BudgetEntity>> = flow { emit(budgets) }

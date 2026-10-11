@@ -7,6 +7,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.ksp)
   alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.google.services)
 }
 
 // Gemini API key is loaded from the gitignored local.properties (or a GEMINI_API_KEY
@@ -124,6 +125,11 @@ dependencies {
 
   // Graphics Path 16KB alignment compliance
   implementation(libs.androidx.graphics.path)
+
+  // Firebase Phone Authentication.
+  // Versions come from the BoM; firebase-auth must NOT pin a version.
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.auth)
 }
 
 

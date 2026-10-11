@@ -13,8 +13,14 @@ junit = "4.13.2"
 kotlin = "2.3.20"
 nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
+firebaseBomVer = "35.0.0"
+googleServices = "4.5.0"
 
 [libraries]
+# Firebase Phone Authentication. Versions come from the BoM; firebase-auth must
+# NOT pin a version of its own.
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBomVer" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
@@ -55,3 +61,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version = "2.3.0" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

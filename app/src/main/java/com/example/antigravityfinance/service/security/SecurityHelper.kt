@@ -496,7 +496,11 @@ class SecurityHelper(private val context: Context) {
     }
 
     // User Registration & Authentication Storage
-    fun saveUserRegistration(name: String, email: String, phone: String) {
+    /**
+     * Stores the user profile. [uid] is the Firebase Auth uid and is the identifier
+     * that replaces the phone number wherever data used to be keyed by it.
+     */
+    fun saveUserRegistration(name: String, email: String, phone: String, uid: String = "") {
         // Fail closed: a partially-encrypted profile must not be recorded as complete.
         val encryptedName = encrypt(name) ?: return
         val encryptedEmail = encrypt(email) ?: return
@@ -507,6 +511,17 @@ class SecurityHelper(private val context: Context) {
             .putString("registered_phone", encryptedPhone)
             .putBoolean("user_registered", true)
             .apply()
+        if (uid.isNotBlank()) saveUserUid(uid)
+    }
+
+    /** Firebase uid for this install. Empty when the user has not signed in. */
+    fun getUserUid(): String {
+        return sharedPrefs.getString("registered_uid", "") ?: ""
+    }
+
+    /** Stored in the clear: it is an opaque Firebase identifier, not a credential. */
+    fun saveUserUid(uid: String) {
+        sharedPrefs.edit().putString("registered_uid", uid).apply()
     }
 
     fun isRegistered(): Boolean {
@@ -530,6 +545,7 @@ class SecurityHelper(private val context: Context) {
             .remove("registered_name")
             .remove("registered_email")
             .remove("registered_phone")
+            .remove("registered_uid")
             .remove("user_registered")
             .apply()
     }

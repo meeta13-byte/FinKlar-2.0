@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 import com.google.ai.client.generativeai.GenerativeModel
+import com.google.firebase.auth.FirebaseAuth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -68,6 +69,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _userPhone = MutableStateFlow(securityHelper.getUserPhone())
     val userPhone: StateFlow<String> = _userPhone.asStateFlow()
 
+    // Firebase uid: the identifier that replaces the phone number.
+    private val _userUid = MutableStateFlow(securityHelper.getUserUid())
+    val userUid: StateFlow<String> = _userUid.asStateFlow()
+
     private val _userProfilePhotoPath = MutableStateFlow(securityHelper.getUserProfilePhotoPath())
     val userProfilePhotoPath: StateFlow<String> = _userProfilePhotoPath.asStateFlow()
 
@@ -77,164 +82,45 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isGoogleSheetsSyncing = MutableStateFlow(false)
     val isGoogleSheetsSyncing: StateFlow<Boolean> = _isGoogleSheetsSyncing.asStateFlow()
 
-    private var tempName = ""
-    private var tempEmail = ""
-    private var tempPhone = ""
+    // ------------------------------------------------------------------
+    // Backend base URL
+    //
+    // TODO(ACTION REQUIRED): this still points at the OLD Firebase project
+    //   "finklar-3c10d" (region us-central1).
+    // The app now lives in Firebase project "finklar-b84a9" (see
+    // app/google-services.json). Replace the region and project id below with
+    // the new project's Cloud Functions values before any backend call is used.
+    //
+    // The old custom OTP functions (sendOTP / verifyOTP) are no longer called:
+    // sign-in is handled by Firebase Phone Auth through PhoneAuthViewModel.
+    // ------------------------------------------------------------------
+    private val FUNCTIONS_BASE_URL: String = "https://us-central1-finklar-3c10d.cloudfunctions.net"
 
-    private val _isOtpSending = MutableStateFlow(false)
-    val isOtpSending: StateFlow<Boolean> = _isOtpSending.asStateFlow()
+    /** True when a Firebase user is signed in; FirebaseAuth is the source of truth. */
+    val isFirebaseUserSignedIn: Boolean
+        get() = FirebaseAuth.getInstance().currentUser != null
 
-    private val _isOtpVerifying = MutableStateFlow(false)
-    val isOtpVerifying: StateFlow<Boolean> = _isOtpVerifying.asStateFlow()
-
-    fun sendOtp(name: String, email: String, phone: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        tempName = name
-        tempEmail = email
-        tempPhone = phone
-
-        viewModelScope.launch {
-            _isOtpSending.value = true
-            try {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-
-                val json = JSONObject().apply {
-                    put("phoneNumber", phone)
-                    put("name", name)
-                    put("email", email)
-                }
-
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = json.toString().toRequestBody(mediaType)
-
-                val request = Request.Builder()
-                    .url("https://us-central1-finklar-3c10d.cloudfunctions.net/sendOTP")
-                    .post(requestBody)
-                    .build()
-
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    client.newCall(request).execute().use { response ->
-                        val resBody = response.body?.string() ?: ""
-                        if (response.isSuccessful) {
-                            val jsonObj = JSONObject(resBody)
-                            if (jsonObj.optBoolean("success", false)) {
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    onSuccess()
-                                }
-                            } else {
-                                val err = jsonObj.optString("error", "Failed to send OTP")
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    onError(err)
-                                }
-                            }
-                        } else {
-                            val errMsg = try {
-                                JSONObject(resBody).optString("error", "HTTP error ${response.code}")
-                            } catch (e: Exception) {
-                                "HTTP error ${response.code}"
-                            }
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                onError(errMsg)
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onError("Network connection error: ${e.localizedMessage}")
-                }
-            } finally {
-                _isOtpSending.value = false
-            }
+    /**
+     * Stable user id for data that used to be keyed by phone number.
+     * Falls back to the stored uid, then empty. Never the phone number.
+     */
+    val userId: String
+        get() = securityHelper.getUserUid().ifBlank {
+            FirebaseAuth.getInstance().currentUser?.uid ?: ""
         }
-    }
 
-    fun verifyOtp(otp: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            _isOtpVerifying.value = true
-            try {
-                if (otp == "123456") {
-                    securityHelper.saveUserRegistration(tempName, tempEmail, tempPhone)
-                    _isRegistered.value = true
-                    _userName.value = tempName
-                    _userEmail.value = tempEmail
-                    _userPhone.value = tempPhone
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onSuccess()
-                    }
-                    return@launch
-                }
-
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-
-                val json = JSONObject().apply {
-                    put("phoneNumber", tempPhone)
-                    put("otp", otp)
-                }
-
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = json.toString().toRequestBody(mediaType)
-
-                val request = Request.Builder()
-                    .url("https://us-central1-finklar-3c10d.cloudfunctions.net/verifyOTP")
-                    .post(requestBody)
-                    .build()
-
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    client.newCall(request).execute().use { response ->
-                        val resBody = response.body?.string() ?: ""
-                        if (response.isSuccessful) {
-                            val jsonObj = JSONObject(resBody)
-                            if (jsonObj.optBoolean("success", false)) {
-                                securityHelper.saveUserRegistration(tempName, tempEmail, tempPhone)
-                                _isRegistered.value = true
-                                _userName.value = tempName
-                                _userEmail.value = tempEmail
-                                _userPhone.value = tempPhone
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    onSuccess()
-                                }
-                            } else {
-                                val err = jsonObj.optString("error", "Invalid OTP")
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    onError(err)
-                                }
-                            }
-                        } else {
-                            val errMsg = try {
-                                JSONObject(resBody).optString("error", "Invalid OTP code")
-                            } catch (e: Exception) {
-                                "HTTP error ${response.code}"
-                            }
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                onError(errMsg)
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onError("Network connection error: ${e.localizedMessage}")
-                }
-            } finally {
-                _isOtpVerifying.value = false
-            }
-        }
-    }
-
-    fun bypassRegistrationForDemo() {
-        securityHelper.saveUserRegistration("Demo User", "demo@finklar.com", "+1234567890")
+    /**
+     * Completes registration after Firebase Phone Auth reports success.
+     * Stores the profile alongside the Firebase uid, which replaces the phone
+     * number as the identifier for this user.
+     */
+    fun completeRegistration(uid: String, name: String, email: String, phone: String) {
+        securityHelper.saveUserRegistration(name, email, phone, uid)
         _isRegistered.value = true
-        _userName.value = "Demo User"
-        _userEmail.value = "demo@finklar.com"
-        _userPhone.value = "+1234567890"
+        _userName.value = name
+        _userEmail.value = email
+        _userPhone.value = phone
+        _userUid.value = uid
     }
 
     fun clearUserRegistrationForLogout() {
@@ -430,6 +316,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // --- INITIALIZATION ---
     init {
+        // A cached Firebase session survives app restarts. Without this, a returning
+        // user would be sent back to onboarding even though Firebase still has them
+        // signed in, because completeRegistration() only runs on OtpState.Success.
+        restoreFirebaseSession()
+
         // Pre-load Gemini API key from the BuildConfig constant (sourced from local.properties)
         // if the user has not already saved one. Empty when no key is configured at build time.
         if (securityHelper.getGeminiApiKey().isBlank()) {
@@ -1263,6 +1154,28 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         if (senderId.isBlank()) return
         securityHelper.saveTrustedSender(senderId)
         _trustedSenders.value = securityHelper.getTrustedSenders()
+    }
+
+    /**
+     * Adopts a still-valid Firebase session on startup. Only fills in a profile when
+     * one has not already been saved, so it never overwrites user-entered details.
+     */
+    private fun restoreFirebaseSession() {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        val uid = user.uid
+        if (securityHelper.getUserUid() != uid) {
+            securityHelper.saveUserRegistration(
+                name = user.displayName ?: _userName.value,
+                email = user.email ?: _userEmail.value,
+                phone = user.phoneNumber ?: _userPhone.value,
+                uid = uid
+            )
+            _userName.value = securityHelper.getUserName()
+            _userEmail.value = securityHelper.getUserEmail()
+            _userPhone.value = securityHelper.getUserPhone()
+        }
+        _userUid.value = uid
+        _isRegistered.value = true
     }
 
     fun logoutUser() {
