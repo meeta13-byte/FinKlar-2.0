@@ -82,7 +82,20 @@ npm run serve   # emulator
 npm run deploy  # deploy --only functions
 ```
 
-Without Twilio credentials `sendOTP` runs in mock mode and returns `mockOtp` for testing.
+Without Twilio credentials `sendOTP` returns `503` and issues no code — there is no mock/test mode.
+
+Both endpoints are `POST`-only and accept only E.164 phone numbers. Configure the
+allowed browser origins (comma-separated) and the code-signing pepper:
+
+```bash
+export OTP_PEPPER="$(openssl rand -hex 32)"   # must be identical across all instances
+export ALLOWED_ORIGINS="https://your-web-app.example"
+```
+
+Codes are never stored or logged in plaintext, are rate-limited per phone number
+and per IP, expire after 5 minutes, and lock the number after 5 failed attempts.
+Use `node firebase_backend/functions/_audit_harness.js` to exercise these
+behaviours locally against stubbed Firebase/Twilio.
 
 ## Testing
 
