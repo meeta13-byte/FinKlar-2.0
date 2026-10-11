@@ -10,15 +10,36 @@ import com.example.antigravityfinance.data.model.ThemeType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import java.security.KeyStore
+import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
 
 class SecurityHelper(private val context: Context) {
     private val sharedPrefs = context.getSharedPreferences("finance_app_prefs", Context.MODE_PRIVATE)
     private val keyAlias = "AntigravityFinanceKey"
+
+    companion object {
+        // PBKDF2 parameters for PIN hashing. The salt is per-install and random.
+        private const val PBKDF2_ITERATIONS = 120_000
+        private const val PBKDF2_KEY_BITS = 256
+        private const val SALT_BYTES = 16
+        private const val GCM_NONCE_BYTES = 12
+
+        // Attempt lockout for the PIN gate.
+        const val PIN_MAX_ATTEMPTS = 5
+        const val PIN_LOCKOUT_MS = 60_000L
+
+        private const val KEY_PIN_HASH = "pin_hash"
+        private const val KEY_PIN_SALT = "pin_salt"
+        private const val KEY_PIN_ATTEMPTS = "pin_failed_attempts"
+        private const val KEY_PIN_LOCKED_UNTIL = "pin_locked_until"
+        private const val LEGACY_KEY_PIN = "app_pin"
+    }
 
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -40,7 +61,12 @@ class SecurityHelper(private val context: Context) {
         return keyGenerator.generateKey()
     }
 
-    private fun encrypt(data: String): String {
+    /**
+     * Encrypts [data]. Returns null on failure — it never returns an empty string,
+     * so callers cannot mistake "encryption broke" for "no data".
+     */
+    private fun encrypt(data: String): String? {
+        if (data.isEmpty()) return null
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
@@ -53,34 +79,49 @@ class SecurityHelper(private val context: Context) {
             
             Base64.encodeToString(combined, Base64.NO_WRAP)
         } catch (e: Exception) {
-            e.printStackTrace()
-            ""
+            // Only the error type is logged; exception text can embed ciphertext
+            // fragments or keystore state.
+            android.util.Log.w("SecurityHelper", "Encryption failed: " + e.javaClass.simpleName)
+            null
         }
     }
 
-    private fun decrypt(encryptedBase64: String): String {
-        if (encryptedBase64.isNullOrEmpty()) return ""
+    /**
+     * Decrypts [encryptedBase64]. Returns null when the input is absent or cannot be
+     * decrypted (wrong key, tampered ciphertext, truncated payload). It never returns
+     * an empty string, which would be indistinguishable from a real empty value.
+     */
+    private fun decrypt(encryptedBase64: String?): String? {
+        if (encryptedBase64.isNullOrEmpty()) return null
         return try {
             val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-            val iv = ByteArray(12)
-            val encrypted = ByteArray(combined.size - 12)
-            System.arraycopy(combined, 0, iv, 0, 12)
-            System.arraycopy(combined, 12, encrypted, 0, encrypted.size)
+            // GCM nonce is 12 bytes and the tag is appended by the cipher; anything
+            // smaller cannot be a valid payload.
+            if (combined.size <= GCM_NONCE_BYTES) return null
+            val iv = ByteArray(GCM_NONCE_BYTES)
+            val encrypted = ByteArray(combined.size - GCM_NONCE_BYTES)
+            System.arraycopy(combined, 0, iv, 0, GCM_NONCE_BYTES)
+            System.arraycopy(combined, GCM_NONCE_BYTES, encrypted, 0, encrypted.size)
             
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val spec = GCMParameterSpec(128, iv)
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), spec)
             
             val decryptedBytes = cipher.doFinal(encrypted)
-            String(decryptedBytes, Charsets.UTF_8)
+            if (decryptedBytes.isEmpty()) null
+            else String(decryptedBytes, Charsets.UTF_8)
         } catch (e: Exception) {
-            e.printStackTrace()
-            ""
+            android.util.Log.w("SecurityHelper", "Decryption failed: " + e.javaClass.simpleName)
+            null
         }
     }
 
+    /**
+     * Returns the Room passphrase, failing closed: an unreadable value throws instead
+     * of handing Room an empty key, which would silently open the database unencrypted.
+     */
     fun getDatabasePassphrase(): String {
-        var encryptedKey = sharedPrefs.getString("db_key_enc", null)
+        val encryptedKey = sharedPrefs.getString("db_key_enc", null)
         if (encryptedKey == null) {
             val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray()
             val sb = StringBuilder()
@@ -89,31 +130,124 @@ class SecurityHelper(private val context: Context) {
                 sb.append(chars[random.nextInt(chars.size)])
             }
             val rawKey = sb.toString()
-            encryptedKey = encrypt(rawKey)
-            sharedPrefs.edit().putString("db_key_enc", encryptedKey).apply()
+            val stored = encrypt(rawKey)
+            // If it cannot be persisted, fail closed rather than returning a key that
+            // will not match on the next launch.
+            ?: throw IllegalStateException("Unable to persist database passphrase")
+            sharedPrefs.edit().putString("db_key_enc", stored).apply()
             return rawKey
         }
         return decrypt(encryptedKey)
+            ?: throw IllegalStateException("Database passphrase could not be decrypted")
     }
 
     // PIN Lock Management
+    //
+    // The PIN is never stored. A random per-install salt plus PBKDF2-HMAC-SHA256
+    // produces the stored verifier, and verification compares digests in constant
+    // time so a correct PIN cannot be discovered byte by byte.
+
+    private fun derivePinKey(pin: String, salt: ByteArray): ByteArray {
+        val spec = PBEKeySpec(pin.toCharArray(), salt, PBKDF2_ITERATIONS, PBKDF2_KEY_BITS)
+        try {
+            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(spec)
+                .encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    private fun storePinHash(pin: String) {
+        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
+        val hash = derivePinKey(pin, salt)
+        sharedPrefs.edit()
+            .putString(KEY_PIN_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString(KEY_PIN_HASH, Base64.encodeToString(hash, Base64.NO_WRAP))
+            .remove(KEY_PIN_ATTEMPTS)
+            .remove(KEY_PIN_LOCKED_UNTIL)
+            .remove(LEGACY_KEY_PIN)
+            .apply()
+    }
+
+    /**
+     * Converts a PIN saved by older builds (recoverable AES ciphertext) into the
+     * hashed format. Runs at most once per install because the legacy key is cleared.
+     */
+    private fun migrateLegacyPin() {
+        val legacy = sharedPrefs.getString(LEGACY_KEY_PIN, null) ?: return
+        if (sharedPrefs.contains(KEY_PIN_HASH)) {
+            sharedPrefs.edit().remove(LEGACY_KEY_PIN).apply()
+            return
+        }
+        val recovered = decrypt(legacy)
+        sharedPrefs.edit().remove(LEGACY_KEY_PIN).apply()
+        if (!recovered.isNullOrEmpty()) storePinHash(recovered)
+    }
+
     fun savePin(pin: String) {
-        val encryptedPin = encrypt(pin)
-        sharedPrefs.edit().putString("app_pin", encryptedPin).apply()
+        storePinHash(pin)
+    }
+
+    /** Milliseconds remaining in the current lockout, or 0 when not locked. */
+    fun pinLockoutRemainingMs(now: Long = System.currentTimeMillis()): Long {
+        val until = sharedPrefs.getLong(KEY_PIN_LOCKED_UNTIL, 0L)
+        return if (until > now) until - now else 0L
+    }
+
+    fun isPinLockedOut(now: Long = System.currentTimeMillis()): Boolean =
+        pinLockoutRemainingMs(now) > 0L
+
+    fun pinAttemptsRemaining(): Int {
+        migrateLegacyPin()
+        if (!sharedPrefs.contains(KEY_PIN_HASH)) return PIN_MAX_ATTEMPTS
+        val used = sharedPrefs.getInt(KEY_PIN_ATTEMPTS, 0)
+        return (PIN_MAX_ATTEMPTS - used).coerceAtLeast(0)
     }
 
     fun verifyPin(pin: String): Boolean {
-        val savedEncryptedPin = sharedPrefs.getString("app_pin", null) ?: return false
-        val savedPin = decrypt(savedEncryptedPin)
-        return savedPin == pin
+        migrateLegacyPin()
+        if (isPinLockedOut()) return false
+
+        val storedHash = sharedPrefs.getString(KEY_PIN_HASH, null) ?: return false
+        val storedSalt = sharedPrefs.getString(KEY_PIN_SALT, null) ?: return false
+        val storedBytes = runCatching { Base64.decode(storedHash, Base64.NO_WRAP) }.getOrNull() ?: return false
+        val saltBytes = runCatching { Base64.decode(storedSalt, Base64.NO_WRAP) }.getOrNull() ?: return false
+
+        val candidate = derivePinKey(pin, saltBytes)
+
+        // Constant-time: compares every byte regardless of where they differ.
+        val matched = MessageDigest.isEqual(candidate, storedBytes)
+
+        if (matched) {
+            sharedPrefs.edit()
+                .remove(KEY_PIN_ATTEMPTS)
+                .remove(KEY_PIN_LOCKED_UNTIL)
+                .apply()
+        } else {
+            val used = sharedPrefs.getInt(KEY_PIN_ATTEMPTS, 0) + 1
+            val editor = sharedPrefs.edit().putInt(KEY_PIN_ATTEMPTS, used)
+            if (used >= PIN_MAX_ATTEMPTS) {
+                editor.putLong(KEY_PIN_LOCKED_UNTIL, System.currentTimeMillis() + PIN_LOCKOUT_MS)
+            }
+            editor.apply()
+        }
+        return matched
     }
 
     fun isPinSet(): Boolean {
-        return sharedPrefs.getString("app_pin", null) != null
+        migrateLegacyPin()
+        return sharedPrefs.getString(KEY_PIN_HASH, null) != null
     }
 
     fun clearPin() {
-        sharedPrefs.edit().remove("app_pin").apply()
+        sharedPrefs.edit()
+            .remove(KEY_PIN_HASH)
+            .remove(KEY_PIN_SALT)
+            .remove(LEGACY_KEY_PIN)
+            .remove(KEY_PIN_ATTEMPTS)
+            .remove(KEY_PIN_LOCKED_UNTIL)
+            .apply()
     }
 
     fun setBiometricsEnabled(enabled: Boolean) {
@@ -185,41 +319,40 @@ class SecurityHelper(private val context: Context) {
 
     // API Keys (For developer mode)
     fun saveGeminiApiKey(key: String) {
-        sharedPrefs.edit().putString("gemini_api_key", encrypt(key)).apply()
+        // Fail closed: a key that cannot be stored is never reported as saved.
+        val enc = encrypt(key) ?: return
+        sharedPrefs.edit().putString("gemini_api_key", enc).apply()
     }
 
     fun getGeminiApiKey(): String {
-        val enc = sharedPrefs.getString("gemini_api_key", "") ?: ""
-        val dec = decrypt(enc)
-        return if (dec.isNotBlank()) dec else ""
+        return decrypt(sharedPrefs.getString("gemini_api_key", null)) ?: ""
     }
 
     fun saveElevenLabsKey(key: String) {
-        sharedPrefs.edit().putString("eleven_labs_key", encrypt(key)).apply()
+        val enc = encrypt(key) ?: return
+        sharedPrefs.edit().putString("eleven_labs_key", enc).apply()
     }
 
     fun getElevenLabsKey(): String {
-        val enc = sharedPrefs.getString("eleven_labs_key", "") ?: ""
-        return decrypt(enc)
+        return decrypt(sharedPrefs.getString("eleven_labs_key", null)) ?: ""
     }
 
     fun saveSarvamKey(key: String) {
-        sharedPrefs.edit().putString("sarvam_key", encrypt(key)).apply()
+        val enc = encrypt(key) ?: return
+        sharedPrefs.edit().putString("sarvam_key", enc).apply()
     }
 
     fun getSarvamKey(): String {
-        val enc = sharedPrefs.getString("sarvam_key", "") ?: ""
-        return decrypt(enc)
+        return decrypt(sharedPrefs.getString("sarvam_key", null)) ?: ""
     }
 
     fun saveSyncedBalance(balance: Double) {
-        sharedPrefs.edit().putString("synced_sms_balance", encrypt(balance.toString())).apply()
+        val enc = encrypt(balance.toString()) ?: return
+        sharedPrefs.edit().putString("synced_sms_balance", enc).apply()
     }
 
     fun getSyncedBalance(): Double? {
-        val enc = sharedPrefs.getString("synced_sms_balance", null) ?: return null
-        val dec = decrypt(enc)
-        return dec.toDoubleOrNull()
+        return decrypt(sharedPrefs.getString("synced_sms_balance", null))?.toDoubleOrNull()
     }
 
     fun getLastSmsScanTimestamp(): Long {
@@ -340,7 +473,7 @@ class SecurityHelper(private val context: Context) {
             val jsonStr = Json.encodeToString(list)
             sharedPrefs.edit().putString("review_needed_sms_queue", jsonStr).apply()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("SecurityHelper", "Failed to persist list: " + e.javaClass.simpleName)
         }
     }
 
@@ -358,15 +491,16 @@ class SecurityHelper(private val context: Context) {
             val jsonStr = Json.encodeToString(list)
             sharedPrefs.edit().putString("ignored_sms_list", jsonStr).apply()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("SecurityHelper", "Failed to persist list: " + e.javaClass.simpleName)
         }
     }
 
     // User Registration & Authentication Storage
     fun saveUserRegistration(name: String, email: String, phone: String) {
-        val encryptedName = encrypt(name)
-        val encryptedEmail = encrypt(email)
-        val encryptedPhone = encrypt(phone)
+        // Fail closed: a partially-encrypted profile must not be recorded as complete.
+        val encryptedName = encrypt(name) ?: return
+        val encryptedEmail = encrypt(email) ?: return
+        val encryptedPhone = encrypt(phone) ?: return
         sharedPrefs.edit()
             .putString("registered_name", encryptedName)
             .putString("registered_email", encryptedEmail)
@@ -380,18 +514,15 @@ class SecurityHelper(private val context: Context) {
     }
 
     fun getUserName(): String {
-        val enc = sharedPrefs.getString("registered_name", null) ?: return ""
-        return decrypt(enc)
+        return decrypt(sharedPrefs.getString("registered_name", null)) ?: ""
     }
 
     fun getUserEmail(): String {
-        val enc = sharedPrefs.getString("registered_email", null) ?: return ""
-        return decrypt(enc)
+        return decrypt(sharedPrefs.getString("registered_email", null)) ?: ""
     }
 
     fun getUserPhone(): String {
-        val enc = sharedPrefs.getString("registered_phone", null) ?: return ""
-        return decrypt(enc)
+        return decrypt(sharedPrefs.getString("registered_phone", null)) ?: ""
     }
 
     fun clearUserRegistration() {
