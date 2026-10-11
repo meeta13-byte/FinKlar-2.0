@@ -20,16 +20,47 @@ data class ParsedSmsResult(
 )
 
 class TransactionSmsReceiver : BroadcastReceiver() {
+    companion object {
+        /** Shortest plausible sender number; filters placeholders like "Unknown". */
+        private const val MIN_SENDER_DIGITS = 5
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             for (message in messages) {
-                val body = message.messageBody
-                val sender = message.originatingAddress ?: "Unknown"
+                val body = message.messageBody ?: continue
+                // A message with no originating address cannot be attributed to any
+                // sender and must not be able to write transactions.
+                val sender = message.originatingAddress
+                if (sender.isNullOrBlank() || sender.equals("unknown", ignoreCase = true)) {
+                    Log.w("SMSReceiver", "Discarded SMS with missing originating address")
+                    continue
+                }
                 val timestamp = message.timestampMillis
                 parseAndProcessSms(context, body, sender, timestamp)
             }
         }
+    }
+
+    /**
+     * Validates the sender before any state is written. A sender is acceptable when it
+     * is well-formed and either explicitly trusted, or when the user has not configured
+     * a trusted list yet (preserving first-run behaviour for auto-detection).
+     */
+    private fun isSenderAcceptable(senderId: String, trustedSenders: Set<String>): Boolean {
+        val trimmed = senderId.trim()
+        if (trimmed.isEmpty() || trimmed.equals("unknown", ignoreCase = true)) return false
+
+        // Reject control characters and placeholder values that are not real numbers.
+        if (trimmed.any { it.isISOControl() }) return false
+        val digits = trimmed.filter { it.isDigit() }
+        if (digits.length < MIN_SENDER_DIGITS) return false
+
+        if (trustedSenders.isEmpty()) return true
+
+        val normalised = trimmed.uppercase()
+        return trustedSenders.any { it.trim().uppercase() == normalised }
     }
 
     fun parseAndProcessSms(
@@ -41,6 +72,13 @@ class TransactionSmsReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             val securityHelper = com.example.antigravityfinance.service.security.SecurityHelper(context.applicationContext)
             val trustedSenders = securityHelper.getTrustedSenders()
+
+            // Reject before touching the database or the synced balance.
+            if (!isSenderAcceptable(senderId, trustedSenders)) {
+                Log.w("SMSReceiver", "Discarded SMS from unvalidated sender")
+                return@launch
+            }
+
             val result = com.example.antigravityfinance.service.sms.detection.SmsDetectionModule.detect(body, senderId, timestamp, trustedSenders)
 
             val db = FinanceDatabase.getDatabase(context)
@@ -74,7 +112,7 @@ class TransactionSmsReceiver : BroadcastReceiver() {
                     )
                     repo.insertTransaction(tx)
                 } else {
-                    Log.d("SMSReceiver", "Duplicate transaction detected: #${duplicate.id}")
+                    Log.d("SMSReceiver", "Duplicate transaction detected; skipping insert")
                 }
             }
         }

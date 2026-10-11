@@ -142,7 +142,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onError("Network connection error: ${e.localizedMessage}")
                 }
@@ -219,7 +219,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onError("Network connection error: ${e.localizedMessage}")
                 }
@@ -324,7 +324,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
         }
         return list
     }
@@ -750,7 +750,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 fileDescriptor.close()
             }
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
         }
         return bitmaps
     }
@@ -941,7 +941,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
                 }
             }
             
@@ -1008,7 +1008,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.w("FinanceViewModel", "Operation failed: " + e.javaClass.simpleName)
                 val errMsg = "Voice translation connection failed: ${e.localizedMessage}"
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     android.widget.Toast.makeText(getApplication(), errMsg, android.widget.Toast.LENGTH_LONG).show()
@@ -1401,7 +1401,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     jsonArray.put(item)
                 }
 
-                android.util.Log.d("FinKlarGoogleSheets", "Committing to Google Sheets: ${jsonArray.toString(2)}")
+                android.util.Log.d("FinKlarGoogleSheets", "Committing ${jsonArray.length()} rows to Google Sheets")
                 
                 // Simulate network sync
                 kotlinx.coroutines.delay(1500)

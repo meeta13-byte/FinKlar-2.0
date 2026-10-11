@@ -472,7 +472,7 @@ fun VoiceTransactionDialog(
                 }
             } catch (e: Exception) {
                 isRecording = false
-                e.printStackTrace()
+                android.util.Log.w("Screens", "Operation failed: " + e.javaClass.simpleName)
                 android.widget.Toast.makeText(context, "Error starting recorder: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -512,7 +512,7 @@ fun VoiceTransactionDialog(
                 }
             } catch (e: Exception) {
                 isRecording = false
-                e.printStackTrace()
+                android.util.Log.w("Screens", "Operation failed: " + e.javaClass.simpleName)
                 android.widget.Toast.makeText(context, "Error starting recorder: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         } else {
