@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Backup rules for Android 11 and below (API <= 30).
+
+   android:allowBackup="false" already disables cloud backup for this app. These rules
+   are kept as a defence-in-depth measure and because the manifest references the file:
+   if allowBackup is ever flipped back to true, nothing sensitive may leave the device.
+
+   Everything is excluded. The Room database is encrypted with a Keystore-backed
+   passphrase, and the shared preferences hold the PIN verifier, the database
+   passphrase, API keys and the registered user profile. Restoring any of that onto
+   another device yields undecryptable data and a usable API key.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="external" path="." />
+    <exclude domain="root" path="." />
+    <exclude domain="device_sharedpref" path="." />
+    <exclude domain="device_database" path="." />
+    <exclude domain="device_file" path="." />
+    <exclude domain="device_root" path="." />
 </full-backup-content>

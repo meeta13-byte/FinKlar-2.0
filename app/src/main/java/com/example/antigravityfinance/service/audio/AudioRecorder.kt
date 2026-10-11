@@ -30,7 +30,7 @@ class AudioRecorder(private val context: Context) {
         try {
             mediaRecorder?.stop()
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("AudioRecorder", "Operation failed: " + e.javaClass.simpleName)
         } finally {
             mediaRecorder?.release()
             mediaRecorder = null

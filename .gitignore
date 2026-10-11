@@ -20,3 +20,7 @@ node_modules/
 firebase_backend/functions/node_modules/
 *test_twilio_otp.js
 package-lock.json
+
+# Firebase emulator debug log
+firebase-debug.log
+firebase-debug.*.log

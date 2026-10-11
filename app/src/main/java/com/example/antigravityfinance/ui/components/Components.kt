@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -550,11 +551,28 @@ fun PinKeyboardGate(
     pinLength: Int = 4,
     isPinSet: Boolean,
     pinError: Boolean,
+    lockoutRemainingMs: Long = 0L,
+    attemptsRemaining: Int = Int.MAX_VALUE,
     onPinSubmitted: (String) -> Unit,
     onFingerprintClick: (() -> Unit)? = null
 ) {
     var enteredPin by remember { mutableStateOf("") }
-    
+    val lockedOut = lockoutRemainingMs > 0L
+    var ticksLeft by remember { mutableStateOf(0L) }
+
+    // Count the lockout down once per second so the user sees when retrying is allowed.
+    LaunchedEffect(lockoutRemainingMs) {
+        if (lockoutRemainingMs <= 0L) {
+            ticksLeft = 0L
+        } else {
+            ticksLeft = (lockoutRemainingMs + 999L) / 1000L
+            while (ticksLeft > 0L) {
+                delay(1000L)
+                ticksLeft -= 1L
+            }
+        }
+    }
+
     LaunchedEffect(pinError) {
         if (pinError) {
             enteredPin = ""
@@ -613,9 +631,20 @@ fun PinKeyboardGate(
                     )
                 }
             }
-            if (pinError) {
-                Text(
-                    text = "Incorrect PIN. Try again.",
+            when {
+                lockedOut -> Text(
+                    text = "Too many attempts. Try again in ${ticksLeft}s.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                pinError -> Text(
+                    text = if (attemptsRemaining in 1 until Int.MAX_VALUE) {
+                        "Incorrect PIN. $attemptsRemaining attempt" +
+                            (if (attemptsRemaining == 1) "" else "s") + " left."
+                    } else {
+                        "Incorrect PIN. Try again."
+                    },
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -630,11 +659,13 @@ fun PinKeyboardGate(
                 .padding(bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val biometricAvailable = onFingerprintClick != null && isPinSet
             val keys = listOf(
                 listOf("1", "2", "3"),
                 listOf("4", "5", "6"),
                 listOf("7", "8", "9"),
-                listOf("F", "0", "⌫") // F = Fingerprint
+                if (biometricAvailable) listOf("F", "0", "⌫") // F = Fingerprint
+                else listOf("", "0", "⌫")
             )
 
             keys.forEach { row ->
@@ -643,6 +674,7 @@ fun PinKeyboardGate(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     row.forEach { key ->
+                        if (key.isEmpty()) return@forEach
                         val isSpecial = key == "F" || key == "⌫"
                         Box(
                             modifier = Modifier
@@ -659,12 +691,12 @@ fun PinKeyboardGate(
                                             }
                                         }
                                         "F" -> {
-                                            if (onFingerprintClick != null && isPinSet) {
-                                                onFingerprintClick()
+                                            if (!lockedOut && biometricAvailable) {
+                                                onFingerprintClick?.invoke()
                                             }
                                         }
                                         else -> {
-                                            if (enteredPin.length < pinLength) {
+                                            if (!lockedOut && enteredPin.length < pinLength) {
                                                 enteredPin += key
                                                 if (enteredPin.length == pinLength) {
                                                     onPinSubmitted(enteredPin)

@@ -133,7 +133,7 @@ object SmsInboxScanner {
                 Math.abs(smsTx.date - dbTx.date) < 120000
             }
             if (!foundInSms) {
-                Log.d("SmsInboxScanner", "Deleting unverified transaction: ${dbTx.merchant} - ${dbTx.amount}")
+                Log.d("SmsInboxScanner", "Deleting an unverified transaction")
                 kotlinx.coroutines.runBlocking {
                     repository.deleteTransaction(dbTx)
                 }
@@ -164,7 +164,7 @@ object SmsInboxScanner {
                 }
             }
         } catch (e: Exception) {
-            Log.e("SmsInboxScanner", "Error querying contacts for number: $phoneNumber", e)
+            Log.e("SmsInboxScanner", "Contact lookup failed: " + e.javaClass.simpleName)
         }
         return null
     }

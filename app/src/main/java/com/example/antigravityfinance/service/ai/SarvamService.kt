@@ -65,16 +65,16 @@ object SarvamService {
             val responseCode = conn.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                Log.d("SarvamService", "Response: $responseText")
+                Log.d("SarvamService", "Transcription succeeded (${responseText.length} chars)")
                 val json = JSONObject(responseText)
                 return@withContext json.optString("transcript", null)
             } else {
                 val errText = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                Log.e("SarvamService", "Failed to transcribe: response code $responseCode, error: $errText")
+                Log.e("SarvamService", "Transcription failed with response code $responseCode")
                 return@withContext null
             }
         } catch (e: Exception) {
-            Log.e("SarvamService", "Error in Sarvam STT: ${e.localizedMessage}", e)
+            Log.e("SarvamService", "Sarvam STT error: " + e.javaClass.simpleName)
             return@withContext null
         }
     }

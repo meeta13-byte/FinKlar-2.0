@@ -186,7 +186,7 @@ object AiAssistantService {
 
             callGemini(systemPrompt, "User query: $query", cleanKey) { it }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("AiAssistant", "Operation failed: " + e.javaClass.simpleName)
             "Error connecting to Gemini API: ${e.localizedMessage}"
         }
     }
@@ -237,7 +237,7 @@ object AiAssistantService {
             val arr = JSONArray(cleaned)
             (0 until arr.length()).map { arr.getString(it) }.filter { it.isNotBlank() }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("AiAssistant", "Operation failed: " + e.javaClass.simpleName)
             emptyList()
         }
     }

@@ -472,7 +472,7 @@ fun VoiceTransactionDialog(
                 }
             } catch (e: Exception) {
                 isRecording = false
-                e.printStackTrace()
+                android.util.Log.w("Screens", "Operation failed: " + e.javaClass.simpleName)
                 android.widget.Toast.makeText(context, "Error starting recorder: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -512,7 +512,7 @@ fun VoiceTransactionDialog(
                 }
             } catch (e: Exception) {
                 isRecording = false
-                e.printStackTrace()
+                android.util.Log.w("Screens", "Operation failed: " + e.javaClass.simpleName)
                 android.widget.Toast.makeText(context, "Error starting recorder: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -3213,9 +3213,12 @@ fun exportTransactionsToExcel(context: android.content.Context, transactions: Li
             csvBuilder.append("${tx.id},\"${tx.category.replace("\"", "\"\"")}\",${tx.amount},${dateStr},${timeStr},\"${walletName}\",${typeStr},\"${tx.merchant.replace("\"", "\"\"")}\"\n")
         }
         
-        // Save to cache directory to share
+        // Save into the dedicated export folder that file_paths.xml exposes.
+        // Writing into cacheDir root would no longer be shareable, and sharing
+        // arbitrary cache paths would widen the FileProvider's reach.
+        val exportDir = java.io.File(context.cacheDir, "export").apply { mkdirs() }
         val fileName = "finklar_transactions_${System.currentTimeMillis()}.csv"
-        val file = java.io.File(context.cacheDir, fileName)
+        val file = java.io.File(exportDir, fileName)
         file.writeText(csvBuilder.toString())
         
         // Share Intent using FileProvider
