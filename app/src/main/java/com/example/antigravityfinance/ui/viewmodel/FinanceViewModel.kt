@@ -49,6 +49,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _pinError = MutableStateFlow(false)
     val pinError: StateFlow<Boolean> = _pinError.asStateFlow()
 
+    // Remaining lockout in milliseconds; > 0 means further PIN guesses are refused.
+    private val _pinLockedForMs = MutableStateFlow(securityHelper.pinLockoutRemainingMs())
+    val pinLockedForMs: StateFlow<Long> = _pinLockedForMs.asStateFlow()
+
+    val biometricsEnabled: Boolean get() = securityHelper.isBiometricsEnabled()
+
     // --- USER REGISTRATION STATE ---
     private val _isRegistered = MutableStateFlow(securityHelper.isRegistered())
     val isRegistered: StateFlow<Boolean> = _isRegistered.asStateFlow()
@@ -478,15 +484,37 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun submitPin(pin: String): Boolean {
-        return if (securityHelper.verifyPin(pin)) {
-            _isAuthRequired.value = false
-            _pinError.value = false
-            true
-        } else {
+        // Refuse guesses while locked out rather than spending an attempt.
+        if (securityHelper.isPinLockedOut()) {
             _pinError.value = true
-            false
+            _pinLockedForMs.value = securityHelper.pinLockoutRemainingMs()
+            return false
         }
+        val ok = securityHelper.verifyPin(pin)
+        _pinError.value = !ok
+        if (ok) {
+            _isAuthRequired.value = false
+            _pinLockedForMs.value = 0L
+        } else {
+            _pinLockedForMs.value = securityHelper.pinLockoutRemainingMs()
+        }
+        return ok
     }
+
+    /**
+     * Unlocks after a successful platform biometric prompt. Callers MUST only invoke
+     * this from a real BiometricPrompt success callback — it performs no verification
+     * of its own and must never be wired to a fixed PIN.
+     */
+    fun unlockViaBiometrics() {
+        if (!securityHelper.isPinSet()) return
+        _isAuthRequired.value = false
+        _pinError.value = false
+        _pinLockedForMs.value = 0L
+    }
+
+    /** Attempts remaining before the PIN gate locks out. */
+    fun pinAttemptsRemaining(): Int = securityHelper.pinAttemptsRemaining()
 
     fun logout() {
         if (securityHelper.isPinSet()) {

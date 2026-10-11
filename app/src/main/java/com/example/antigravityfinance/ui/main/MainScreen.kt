@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Brush
 import com.example.antigravityfinance.theme.InterFontFamily
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
+import com.example.antigravityfinance.service.security.BiometricGate
 
 enum class MainTab(val displayName: String, val icon: ImageVector) {
     DASHBOARD("Home", Icons.Rounded.Home),
@@ -53,6 +55,7 @@ fun MainScreen(
     val isDarkPref by viewModel.isDarkMode.collectAsState()
     val customAccent by viewModel.customAccent.collectAsState()
     val language by viewModel.language.collectAsState()
+    val context = LocalContext.current
 
     var showSplash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -70,6 +73,7 @@ fun MainScreen(
         val isPinSet by viewModel.isPinSet.collectAsState()
         val isAuthRequired by viewModel.isAuthRequired.collectAsState()
         val pinError by viewModel.pinError.collectAsState()
+        val pinLockedForMs by viewModel.pinLockedForMs.collectAsState()
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -84,8 +88,14 @@ fun MainScreen(
                 PinKeyboardGate(
                     isPinSet = true,
                     pinError = pinError,
+                    lockoutRemainingMs = pinLockedForMs,
+                    attemptsRemaining = viewModel.pinAttemptsRemaining(),
                     onPinSubmitted = { pin -> viewModel.submitPin(pin) },
-                    onFingerprintClick = { viewModel.submitPin("1234") } // Mock biometric bypass
+                    // Unlocks only on a real BiometricPrompt success. This previously
+                    // submitted a hardcoded PIN, which was an authentication bypass.
+                    onFingerprintClick = if (BiometricGate.isAvailable(context)) {
+                        { BiometricGate.authenticate(context) { viewModel.unlockViaBiometrics() } }
+                    } else null
                 )
             } else {
                 // Main Application Workspace
