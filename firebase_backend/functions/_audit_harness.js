@@ -126,12 +126,14 @@ const lastCode = () => (sentSms.length ? sentSms[sentSms.length - 1].body.match(
   check("rejects bare 10-digit number", r._status === 400, r._body);
   r = await call(sendOTP, { body: { phoneNumber: "+9112345abc" } });
   check("rejects non-digits", r._status === 400, r._body);
-  r = await call(sendOTP, { body: { phoneNumber: "+9198765 43210" }, headers: { "x-forwarded-for": "10.0.0.1" } });
+  r = await call(sendOTP, { body: { phoneNumber: "+91 98765 43210" }, headers: { "x-forwarded-for": "10.0.0.1" } });
   check("accepts spaced input after normalization", r._status === 200, JSON.stringify(r._body));
-  r = await call(sendOTP, { body: { phoneNumber: "+91-98765-43210" }, headers: { "x-forwarded-for": "10.0.0.2" } });
+  r = await call(sendOTP, { body: { phoneNumber: "+91-98765-43211" }, headers: { "x-forwarded-for": "10.0.0.2" } });
   check("accepts dashed input after normalization", r._status === 200, JSON.stringify(r._body));
-  r = await call(sendOTP, { body: { phoneNumber: "+91 (98765) 43210" }, headers: { "x-forwarded-for": "10.0.0.3" } });
+  r = await call(sendOTP, { body: { phoneNumber: "+91 (98765) 43212" }, headers: { "x-forwarded-for": "10.0.0.3" } });
   check("accepts parenthesised input after normalization", r._status === 200, JSON.stringify(r._body));
+  r = await call(sendOTP, { body: { phoneNumber: "+919876543210" } });
+  check("same number resend within cooldown is throttled", r._status === 429, JSON.stringify(r._body));
 
   // ---- code generation ----
   console.log("\n[Code generation]");
