@@ -209,14 +209,7 @@ class SecurityHelper(private val context: Context) {
 
     fun getSarvamKey(): String {
         val enc = sharedPrefs.getString("sarvam_key", "") ?: ""
-        if (enc.isBlank()) {
-            return "sk_hffq66ua_3qucYR1Zpdn8vjsFj8VT4kHo"
-        }
-        val decrypted = decrypt(enc)
-        if (decrypted.isBlank()) {
-            return "sk_hffq66ua_3qucYR1Zpdn8vjsFj8VT4kHo"
-        }
-        return decrypted
+        return decrypt(enc)
     }
 
     fun saveSyncedBalance(balance: Double) {
