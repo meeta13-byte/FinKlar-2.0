@@ -232,9 +232,4 @@ const lastCode = () => (sentSms.length ? sentSms[sentSms.length - 1].body.match(
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
   process.exit(fail ? 1 : 0);
-})(););
-  check("error body has no account sid", !JSON.stringify(bad._body).includes("ACtest"));
-
-  console.log(`\n==== ${pass} passed, ${fail} failed ====`);
-  process.exit(fail ? 1 : 0);
-})(););
+})();
