@@ -120,7 +120,8 @@ object AiAssistantService {
         val mediaType = "application/json; charset=utf-8".toMediaType()
         val requestBody = jsonRequest.toString().toRequestBody(mediaType)
         val request = Request.Builder()
-            .url("$ENDPOINT?key=$apiKey")
+            .url(ENDPOINT)
+            .addHeader("x-goog-api-key", apiKey)
             .post(requestBody)
             .build()
 
