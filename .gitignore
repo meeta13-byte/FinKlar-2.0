@@ -24,3 +24,8 @@ package-lock.json
 # Firebase emulator debug log
 firebase-debug.log
 firebase-debug.*.log
+
+# Per-checkout link to a Firebase project. Not shared: the app talks to the
+# project in app/google-services.json, so committing a local link would send
+# other developers' `firebase deploy` to the wrong project.
+firebase_backend/.firebaserc
