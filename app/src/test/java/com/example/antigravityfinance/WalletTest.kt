@@ -2,6 +2,7 @@ package com.example.antigravityfinance
 
 import com.example.antigravityfinance.data.local.db.*
 import com.example.antigravityfinance.data.model.*
+import com.example.antigravityfinance.data.repository.BankAccountRepository
 import com.example.antigravityfinance.data.repository.WalletRepository
 import com.example.antigravityfinance.data.repository.TransactionRepository
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,8 @@ class WalletTest {
         }
 
         override suspend fun getWalletById(id: Int): WalletEntity? = wallets.find { it.id == id }
+
+        override fun getWalletByIdFlow(id: Int): Flow<WalletEntity?> = flow { emit(wallets.find { it.id == id }) }
 
         override suspend fun getDefaultWallet(): WalletEntity? = wallets.find { it.isDefault }
 
@@ -52,13 +55,19 @@ class WalletTest {
             wallets.removeIf { it.id == wallet.id }
         }
 
-        override suspend fun getIncomeSum(walletId: Int): Double? {
-            val sum = transactions.filter { it.walletId == walletId && it.status == "CONFIRMED" && it.isIncome }.sumOf { it.amount }
+        override suspend fun getIncomeSum(walletId: Int, bankAccountId: Int?): Double? {
+            val sum = transactions.filter {
+                it.walletId == walletId && it.status == "CONFIRMED" && it.isIncome &&
+                    (bankAccountId == null || it.bankAccountId == bankAccountId)
+            }.sumOf { it.amount }
             return if (sum == 0.0) null else sum
         }
 
-        override suspend fun getExpenseSum(walletId: Int): Double? {
-            val sum = transactions.filter { it.walletId == walletId && it.status == "CONFIRMED" && !it.isIncome }.sumOf { it.amount }
+        override suspend fun getExpenseSum(walletId: Int, bankAccountId: Int?): Double? {
+            val sum = transactions.filter {
+                it.walletId == walletId && it.status == "CONFIRMED" && !it.isIncome &&
+                    (bankAccountId == null || it.bankAccountId == bankAccountId)
+            }.sumOf { it.amount }
             return if (sum == 0.0) null else sum
         }
 
@@ -72,12 +81,44 @@ class WalletTest {
             return if (sum == 0.0) null else sum
         }
 
-        override suspend fun getTransactionCount(walletId: Int): Int {
-            return transactions.count { it.walletId == walletId }
+        override suspend fun getTransactionCount(walletId: Int, bankAccountId: Int?): Int {
+            return transactions.count {
+                it.walletId == walletId && (bankAccountId == null || it.bankAccountId == bankAccountId)
+            }
         }
 
         override suspend fun getAllWalletsList(): List<WalletEntity> =
             wallets.sortedBy { it.createdAt }
+
+        override suspend fun getWalletByLinkedBankAccount(bankAccountId: Int): WalletEntity? =
+            wallets.find { it.linkedBankAccountId == bankAccountId }
+    }
+
+    class FakeBankAccountDao : BankAccountDao {
+        val accounts = mutableListOf<BankAccountEntity>()
+        var nextId = 1
+
+        override fun getAllBankAccounts(): Flow<List<BankAccountEntity>> = flow { emit(accounts) }
+
+        override suspend fun getBankAccountById(id: Int): BankAccountEntity? = accounts.find { it.id == id }
+
+        override suspend fun findByBankAndDigits(bankName: String, last4: String): BankAccountEntity? =
+            accounts.find { it.bankName == bankName && it.last4 == last4 }
+
+        override suspend fun insert(account: BankAccountEntity): Long {
+            val newId = if (account.id == 0) nextId++ else account.id
+            accounts.add(account.copy(id = newId))
+            return newId.toLong()
+        }
+
+        override suspend fun updateSeen(id: Int, balance: Double?, seenAt: Long) {
+            val idx = accounts.indexOfFirst { it.id == id }
+            if (idx >= 0) accounts[idx] = accounts[idx].copy(lastKnownBalance = balance, lastSeenAt = seenAt)
+        }
+
+        override suspend fun delete(id: Int) {
+            accounts.removeIf { it.id == id }
+        }
     }
 
     class FakeWalletTransferDao : WalletTransferDao {
@@ -109,6 +150,7 @@ class WalletTest {
         override fun getTransactionsByStatus(status: String): Flow<List<TransactionEntity>> = flow { emit(list.filter { it.status == status }) }
         override suspend fun getTransactionById(id: Int): TransactionEntity? = list.find { it.id == id }
         override suspend fun findPotentialDuplicates(amount: Double, merchant: String, date: Long, timeThreshold: Long): List<TransactionEntity> = emptyList()
+        override suspend fun findRecentSmsDuplicate(amount: Double, merchant: String, date: Long, timeThreshold: Long): TransactionEntity? = null
         override suspend fun insert(transaction: TransactionEntity): Long {
             list.add(transaction)
             return transaction.id.toLong()
@@ -125,7 +167,9 @@ class WalletTest {
         override suspend fun deleteAllTransactions() {
             list.clear()
         }
-        override fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>> = flow { emit(list.filter { it.walletId == walletId }) }
+        override fun getTransactionsByWallet(walletId: Int, bankAccountId: Int?): Flow<List<TransactionEntity>> = flow {
+            emit(list.filter { it.walletId == walletId && (bankAccountId == null || it.bankAccountId == bankAccountId) })
+        }
 
         override suspend fun moveTransactionsToWallet(oldWalletId: Int, newWalletId: Int) {
             for (i in list.indices) {
@@ -139,6 +183,14 @@ class WalletTest {
             for (i in list.indices) {
                 if (list[i].walletId == walletId) {
                     list[i] = list[i].copy(walletId = null)
+                }
+            }
+        }
+
+        override suspend fun clearBankAccount(bankAccountId: Int) {
+            for (i in list.indices) {
+                if (list[i].bankAccountId == bankAccountId) {
+                    list[i] = list[i].copy(bankAccountId = null)
                 }
             }
         }
@@ -333,5 +385,118 @@ class WalletTest {
         val w2Updated = walletDao.getWalletById(w2Id)
         assertEquals(600.0, w1Updated!!.balance, 0.0)
         assertEquals(900.0, w2Updated!!.balance, 0.0)
+    }
+
+    // --- MULTI-BANK SUPPORT ---
+
+    private fun transactionRepositoryFor(walletDao: FakeWalletDao, transactionDao: FakeTransactionDao): TransactionRepository {
+        val budgetDao = object : BudgetDao {
+            val budgets = mutableListOf<BudgetEntity>()
+            override fun getAllBudgets(): Flow<List<BudgetEntity>> = flow { emit(budgets) }
+            override suspend fun getBudgetByCategory(category: String): BudgetEntity? = budgets.find { it.category == category }
+            override suspend fun insert(budget: BudgetEntity): Long { budgets.add(budget); return budgets.size.toLong() }
+            override suspend fun update(budget: BudgetEntity) {
+                val idx = budgets.indexOfFirst { it.category == budget.category }
+                if (idx >= 0) budgets[idx] = budget
+            }
+            override suspend fun delete(budget: BudgetEntity) {}
+        }
+        val recurringMerchantDao = object : RecurringMerchantDao {
+            override suspend fun getAllRecurringMerchants(): List<RecurringMerchantEntity> = emptyList()
+            override suspend fun getRecurringMerchant(merchant: String): RecurringMerchantEntity? = null
+            override suspend fun insert(recurringMerchant: RecurringMerchantEntity) {}
+        }
+        return TransactionRepository(transactionDao, recurringMerchantDao, budgetDao, walletDao)
+    }
+
+    @Test
+    fun testUnrestrictedWalletCountsEveryBankAccount() = runBlocking {
+        val transactionDao = FakeTransactionDao()
+        val walletDao = FakeWalletDao().also { it.transactions = transactionDao.list }
+        val repository = WalletRepository(walletDao, FakeWalletTransferDao(), transactionDao)
+
+        val walletId = walletDao.insert(WalletEntity(id = 1, name = "All", balance = 0.0, purpose = null, isDefault = true, createdAt = 0)).toInt()
+        transactionDao.list.add(TransactionEntity(amount = 1000.0, merchant = "A", date = 0, category = "X", isIncome = true, status = "CONFIRMED", walletId = walletId, bankAccountId = 1))
+        transactionDao.list.add(TransactionEntity(amount = 400.0, merchant = "B", date = 0, category = "X", isIncome = true, status = "CONFIRMED", walletId = walletId, bankAccountId = 2))
+
+        assertEquals(1400.0, repository.recomputeWalletBalance(walletId), 0.0)
+    }
+
+    @Test
+    fun testRestrictedWalletCountsOnlyItsBankAccount() = runBlocking {
+        val transactionDao = FakeTransactionDao()
+        val walletDao = FakeWalletDao().also { it.transactions = transactionDao.list }
+        val repository = WalletRepository(walletDao, FakeWalletTransferDao(), transactionDao)
+
+        // Restricted to bank account 1.
+        val walletId = walletDao.insert(WalletEntity(id = 1, name = "Salary account", balance = 0.0, purpose = null, isDefault = false, createdAt = 0, linkedBankAccountId = 1)).toInt()
+        transactionDao.list.add(TransactionEntity(amount = 1000.0, merchant = "A", date = 0, category = "X", isIncome = true, status = "CONFIRMED", walletId = walletId, bankAccountId = 1))
+        transactionDao.list.add(TransactionEntity(amount = 400.0, merchant = "B", date = 0, category = "X", isIncome = true, status = "CONFIRMED", walletId = walletId, bankAccountId = 2))
+
+        // Only the linked account's income counts.
+        assertEquals(1000.0, repository.recomputeWalletBalance(walletId), 0.0)
+        val visible = repository.getTransactionsForWallet(walletId).first()
+        assertEquals(1, visible.size)
+        assertEquals("A", visible.first().merchant)
+    }
+
+    @Test
+    fun testTransactionIsRoutedToTheWalletLinkedToItsBankAccount() = runBlocking {
+        val transactionDao = FakeTransactionDao()
+        val walletDao = FakeWalletDao().also { it.transactions = transactionDao.list }
+        val repo = transactionRepositoryFor(walletDao, transactionDao)
+
+        val defaultId = walletDao.insert(WalletEntity(id = 1, name = "Default", balance = 0.0, purpose = null, isDefault = true, createdAt = 0)).toInt()
+        val linkedId = walletDao.insert(WalletEntity(id = 2, name = "Savings", balance = 0.0, purpose = null, isDefault = false, createdAt = 1, linkedBankAccountId = 7)).toInt()
+
+        // From account 7 -> the wallet restricted to account 7.
+        repo.insertTransaction(Transaction(amount = 250.0, merchant = "M", date = 0, category = "X", bankAccountId = 7))
+        // From any other account -> the default wallet.
+        repo.insertTransaction(Transaction(amount = 99.0, merchant = "M2", date = 0, category = "X", bankAccountId = 8))
+        // Manual entry with no account -> the default wallet.
+        repo.insertTransaction(Transaction(amount = 10.0, merchant = "M3", date = 0, category = "X"))
+
+        assertEquals(1, transactionDao.list.count { it.walletId == linkedId })
+        assertEquals(2, transactionDao.list.count { it.walletId == defaultId })
+        assertEquals(defaultId, transactionDao.list.first { it.merchant == "M2" }.walletId)
+    }
+
+    @Test
+    fun testBankAccountIsDetectedOncePerBankAndDigits() = runBlocking {
+        val dao = FakeBankAccountDao()
+        val repository = BankAccountRepository(dao)
+
+        fun detection(balance: Double?) = com.example.antigravityfinance.service.sms.detection.SmsDetectionResult(
+            classification = com.example.antigravityfinance.service.sms.detection.SmsClassification.REAL_DEBIT_TRANSACTION,
+            transactionType = com.example.antigravityfinance.service.sms.detection.TransactionType.DEBIT,
+            amount = 100.0,
+            currency = "INR",
+            merchantOrSender = "M",
+            bankName = "HDFC Bank",
+            accountLastDigits = "1234",
+            cardLastDigits = null,
+            upiId = null,
+            transactionReferenceNumber = null,
+            availableBalance = balance,
+            smsSenderId = "AD-HDFCBK",
+            smsTimestamp = 1000L,
+            confidenceScore = 80,
+            autoAdd = true,
+            reviewRequired = false,
+            classificationReason = emptyList(),
+            rawSms = "raw"
+        )
+
+        val firstId = repository.recordDetection(detection(5000.0))
+        val secondId = repository.recordDetection(detection(4500.0))
+
+        // Same bank and digits = the same account, with a refreshed balance.
+        assertEquals(1, dao.accounts.size)
+        assertEquals(firstId, secondId)
+        assertEquals(4500.0, dao.accounts.first().lastKnownBalance!!, 0.0)
+
+        // No usable digits -> nothing recorded.
+        assertNull(repository.recordDetection(detection(4500.0).copy(accountLastDigits = null)))
+        assertEquals(1, dao.accounts.size)
     }
 }

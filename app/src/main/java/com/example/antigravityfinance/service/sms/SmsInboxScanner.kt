@@ -19,8 +19,9 @@ object SmsInboxScanner {
     )
 
     suspend fun reconcileInbox(
-        context: Context, 
-        repository: TransactionRepository
+        context: Context,
+        repository: TransactionRepository,
+        bankAccountRepository: com.example.antigravityfinance.data.repository.BankAccountRepository
     ): SyncSmsResult {
         val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
             context,
@@ -82,7 +83,8 @@ object SmsInboxScanner {
                             account = result.bankName.ifBlank { "Bank SMS" },
                             status = TransactionStatus.CONFIRMED,
                             isIncome = result.transactionType == TransactionType.CREDIT,
-                            detectedFromSms = true
+                            detectedFromSms = true,
+                            bankAccountId = bankAccountRepository.recordDetection(result)
                         )
                         parsedSmsList.add(transaction)
                         

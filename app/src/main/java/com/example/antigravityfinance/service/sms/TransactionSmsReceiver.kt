@@ -5,10 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
-import com.example.antigravityfinance.data.local.db.FinanceDatabase
 import com.example.antigravityfinance.data.model.Transaction
 import com.example.antigravityfinance.data.model.TransactionStatus
-import com.example.antigravityfinance.data.repository.TransactionRepository
+import com.example.antigravityfinance.service.notification.NotificationIngestor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -22,45 +21,46 @@ data class ParsedSmsResult(
 class TransactionSmsReceiver : BroadcastReceiver() {
     companion object {
         /** Shortest plausible sender number; filters placeholders like "Unknown". */
+        const val TAG = "TransactionSmsReceiver"
         private const val MIN_SENDER_DIGITS = 5
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
-            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            for (message in messages) {
-                val body = message.messageBody ?: continue
-                // A message with no originating address cannot be attributed to any
-                // sender and must not be able to write transactions.
-                val sender = message.originatingAddress
-                if (sender.isNullOrBlank() || sender.equals("unknown", ignoreCase = true)) {
-                    Log.w("SMSReceiver", "Discarded SMS with missing originating address")
-                    continue
-                }
-                val timestamp = message.timestampMillis
-                parseAndProcessSms(context, body, sender, timestamp)
-            }
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isEmpty()) return
+
+        // A long bank SMS arrives split into parts. Parsing each part on its own loses
+        // the amount, the account and the reference, so the parts are reassembled first.
+        val body = messages.joinToString(" ") { it.messageBody.orEmpty() }.trim()
+        if (body.isEmpty()) return
+
+        val first = messages.first()
+        val sender = first.originatingAddress
+        if (sender.isNullOrBlank() || sender.equals("unknown", ignoreCase = true)) {
+            Log.w(TAG, "REJECTED: SMS has no originating address")
+            return
         }
+
+        Log.i(TAG, "RECEIVED ${messages.size} part(s) from $sender: $body")
+        parseAndProcessSms(context, body, sender, first.timestampMillis)
     }
 
     /**
-     * Validates the sender before any state is written. A sender is acceptable when it
-     * is well-formed and either explicitly trusted, or when the user has not configured
-     * a trusted list yet (preserving first-run behaviour for auto-detection).
+     * Validates the sender before any state is written. Only the shape of the sender is
+     * checked here: an unknown-but-well-formed sender still has to reach the detector,
+     * which decides acceptance on the message content and its own sender scoring.
+     *
+     * shortcut: a whitelist is *not* used as a hard gate here, because that silently
+     * discarded every bank the user had not added by hand. Replace with an explicit
+     * allow-list only if the user-facing "trusted senders" setting is made mandatory.
      */
-    private fun isSenderAcceptable(senderId: String, trustedSenders: Set<String>): Boolean {
+    private fun isSenderAcceptable(senderId: String): Boolean {
         val trimmed = senderId.trim()
         if (trimmed.isEmpty() || trimmed.equals("unknown", ignoreCase = true)) return false
-
-        // Reject control characters and placeholder values that are not real numbers.
         if (trimmed.any { it.isISOControl() }) return false
         val digits = trimmed.filter { it.isDigit() }
-        if (digits.length < MIN_SENDER_DIGITS) return false
-
-        if (trustedSenders.isEmpty()) return true
-
-        val normalised = trimmed.uppercase()
-        return trustedSenders.any { it.trim().uppercase() == normalised }
+        return digits.length >= MIN_SENDER_DIGITS
     }
 
     fun parseAndProcessSms(
@@ -70,51 +70,13 @@ class TransactionSmsReceiver : BroadcastReceiver() {
         timestamp: Long = System.currentTimeMillis()
     ) {
         CoroutineScope(Dispatchers.IO).launch {
-            val securityHelper = com.example.antigravityfinance.service.security.SecurityHelper(context.applicationContext)
-            val trustedSenders = securityHelper.getTrustedSenders()
-
-            // Reject before touching the database or the synced balance.
-            if (!isSenderAcceptable(senderId, trustedSenders)) {
-                Log.w("SMSReceiver", "Discarded SMS from unvalidated sender")
+            if (!isSenderAcceptable(senderId)) {
+                Log.w(TAG, "REJECTED: malformed sender '$senderId'")
                 return@launch
             }
-
-            val result = com.example.antigravityfinance.service.sms.detection.SmsDetectionModule.detect(body, senderId, timestamp, trustedSenders)
-
-            val db = FinanceDatabase.getDatabase(context)
-            val repo = TransactionRepository(db.transactionDao(), db.recurringMerchantDao(), db.budgetDao(), db.walletDao())
-
-            if (result.availableBalance != null) {
-                securityHelper.saveSyncedBalance(result.availableBalance)
-            }
-
-            if (result.autoAdd && result.amount != null) {
-                var resolvedMerchant = result.merchantOrSender
-                if (resolvedMerchant == "Unknown Merchant" && senderId.isNotBlank() && senderId != "Unknown") {
-                    val contactName = SmsInboxScanner.getContactName(context, senderId)
-                    if (contactName != null) {
-                        resolvedMerchant = contactName
-                    }
-                }
-                val duplicate = repo.checkForDuplicate(result.amount, resolvedMerchant, result.smsTimestamp)
-                if (duplicate == null) {
-                    val category = AutoCategorizer.categorize(resolvedMerchant)
-                    val tx = Transaction(
-                        amount = result.amount,
-                        merchant = resolvedMerchant,
-                        date = result.smsTimestamp,
-                        category = category,
-                        notes = result.rawSms,
-                        account = result.bankName.ifBlank { "Bank SMS" },
-                        status = TransactionStatus.CONFIRMED,
-                        isIncome = result.transactionType == com.example.antigravityfinance.service.sms.detection.TransactionType.CREDIT,
-                        detectedFromSms = true
-                    )
-                    repo.insertTransaction(tx)
-                } else {
-                    Log.d("SMSReceiver", "Duplicate transaction detected; skipping insert")
-                }
-            }
+            // The SMS receiver and the notification listener share one ingestion path so
+            // the two sources cannot drift apart.
+            NotificationIngestor.ingest(context, body, senderId, timestamp)
         }
     }
 }

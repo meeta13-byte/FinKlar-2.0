@@ -370,10 +370,11 @@ fun WalletDetailScreen(
     val language by viewModel.language.collectAsState()
     val context = LocalContext.current
 
-    val transactions by viewModel.allTransactions.collectAsState()
-    val walletTransactions = remember(transactions, walletId) {
-        transactions.filter { it.walletId == walletId }
-    }
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+    // The list follows the wallet's bank account restriction: null = all accounts.
+    val walletTransactions by remember(walletId) { viewModel.transactionsForWallet(walletId) }
+        .collectAsState(initial = emptyList())
+    var showBankAccountPicker by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
 
@@ -630,6 +631,57 @@ fun WalletDetailScreen(
                 }
             }
 
+            // Bank account link: default "All bank accounts", optionally one specific account.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF101412))
+                    .border(0.7.dp, Color(0xFF26312C), RoundedCornerShape(14.dp))
+                    .clickable { showBankAccountPicker = true }
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Bank account".translate(language),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = InterFontFamily,
+                            color = Color(0xFF9AA59F)
+                        )
+                    )
+                    val linked = bankAccounts.find { it.id == wallet.linkedBankAccountId }
+                    Text(
+                        text = linked?.let { "${it.bankName} ••••${it.last4}" }
+                            ?: "All bank accounts".translate(language),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFFF4F7F5)
+                    )
+                }
+                Icon(
+                    Icons.Rounded.ExpandMore,
+                    contentDescription = "Choose bank account",
+                    tint = Color(0xFF19C37D)
+                )
+            }
+
+            if (showBankAccountPicker) {
+                BankAccountPickerDialog(
+                    accounts = bankAccounts,
+                    selectedId = wallet.linkedBankAccountId,
+                    language = language,
+                    onDismiss = { showBankAccountPicker = false },
+                    onSelect = { accountId ->
+                        viewModel.setWalletBankAccount(wallet.id, accountId)
+                        showBankAccountPicker = false
+                    }
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -859,6 +911,75 @@ fun WalletDetailScreen(
 // Wrapper extension to avoid name conflict in parameter closure
 private fun FinanceViewModel.deleteWallet(wallet: Wallet, onCornerCaseSuccess: () -> Unit, onError: (String) -> Unit) {
     this.deleteWallet(wallet, onSuccess = onCornerCaseSuccess, onError = onError)
+}
+
+/** Chooses which bank account feeds a wallet; null means all of them. */
+@Composable
+fun BankAccountPickerDialog(
+    accounts: List<BankAccount>,
+    selectedId: Int?,
+    language: com.example.antigravityfinance.data.model.LanguageType,
+    onDismiss: () -> Unit,
+    onSelect: (Int?) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Bank account".translate(language),
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+            }
+        },
+        containerColor = Color(0xFF1C1C1E),
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (accounts.isEmpty()) {
+                    Text(
+                        text = "No bank accounts detected yet".translate(language),
+                        color = Color(0xFF9AA59F),
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+                (listOf<BankAccount?>(null) + accounts).forEach { account ->
+                    val isSelected = account?.id == selectedId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSelected) Color(0xFF1B241F) else Color.Transparent)
+                            .clickable { onSelect(account?.id) }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = account?.let { "${it.bankName} ••••${it.last4}" }
+                                ?: "All bank accounts".translate(language),
+                            color = Color.White
+                        )
+                        if (isSelected) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF19C37D),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable

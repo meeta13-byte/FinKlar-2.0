@@ -59,7 +59,9 @@ data class Transaction(
     val isIncome: Boolean = false,
     val isRecurring: Boolean = false,
     val detectedFromSms: Boolean = false,
-    val walletId: Int? = null
+    val walletId: Int? = null,
+    /** Bank account this was read from; null for manual, OCR and voice entries. */
+    val bankAccountId: Int? = null
 )
 
 @Serializable
@@ -71,8 +73,25 @@ data class Wallet(
     val isDefault: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val investedAmount: Double = 0.0,
-    val initialAmount: Double = 0.0
+    val initialAmount: Double = 0.0,
+    /** null = every bank account feeds this wallet (the default). */
+    val linkedBankAccountId: Int? = null
 )
+
+/**
+ * A bank account discovered from a transaction notification. Identity is the
+ * (bankName, last4) pair because the full number is never available.
+ */
+@Serializable
+data class BankAccount(
+    val id: Int = 0,
+    val bankName: String,
+    val last4: String,
+    val lastKnownBalance: Double? = null,
+    val lastSeenAt: Long = System.currentTimeMillis()
+) {
+    val displayName: String get() = "$bankName ••••$last4"
+}
 
 @Serializable
 data class WalletTransfer(
