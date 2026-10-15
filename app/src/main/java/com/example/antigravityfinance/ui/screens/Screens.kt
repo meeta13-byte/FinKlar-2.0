@@ -959,77 +959,125 @@ fun ProgressRingCard(
     }
 }
 
+/**
+ * Alert card. Long-pressing opens the Edit / Delete / Reminder menu; the actions are
+ * optional so the "Add commitment" placeholder card has no menu.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AlertCard(
     title: String,
     dueDate: String,
     amount: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    onReminder: (() -> Unit)? = null
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        modifier = Modifier
-            .width(140.dp)
-            .height(110.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF151B18), Color(0xFF101412))
-                )
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Column(
+    val hasMenu = onEdit != null && onDelete != null && onReminder != null
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .width(140.dp)
+                .height(110.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color(0xFF151B18), Color(0xFF101412))
+                    )
+                )
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { if (hasMenu) menuExpanded = true }
+                )
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFF1B241F), CircleShape)
-                        .border(0.5.dp, Color(0xFF26312C), CircleShape),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Rounded.Event,
-                        contentDescription = null,
-                        tint = Color(0xFF19C37D),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF1B241F), CircleShape)
+                            .border(0.5.dp, Color(0xFF26312C), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Event,
+                            contentDescription = null,
+                            tint = Color(0xFF19C37D),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = InterFontFamily
+                            ),
+                            color = Color(0xFFF4F7F5)
+                        )
+                        Text(
+                            text = dueDate,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                            color = Color(0xFF9AA59F)
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = InterFontFamily
-                        ),
-                        color = Color(0xFFF4F7F5)
-                    )
-                    Text(
-                        text = dueDate,
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
-                        color = Color(0xFF9AA59F)
-                    )
-                }
+                Text(
+                    text = amount,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFF58C7F5)
+                )
             }
-            Text(
-                text = amount,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = InterFontFamily
-                ),
-                color = Color(0xFF58C7F5)
-            )
+        }
+
+        if (hasMenu) {
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Edit".translate(LanguageType.ENGLISH)) },
+                    leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Reminder".translate(LanguageType.ENGLISH)) },
+                    leadingIcon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
+                    onClick = {
+                        menuExpanded = false
+                        onReminder()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Delete".translate(LanguageType.ENGLISH), color = Color(0xFFFF5C67)) },
+                    leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = Color(0xFFFF5C67)) },
+                    onClick = {
+                        menuExpanded = false
+                        onDelete()
+                    }
+                )
+            }
         }
     }
 }
@@ -1411,6 +1459,8 @@ fun DashboardScreen(
     var showWalletDetailId by remember { mutableStateOf<Int?>(null) }
     var showBankAccountsDialog by remember { mutableStateOf(false) }
     var showEditCommitments by remember { mutableStateOf(false) }
+    var showConfirmDeleteAlert by remember { mutableStateOf(false) }
+    var showReminderDialog by remember { mutableStateOf(false) }
     var selectedCommitment by remember { mutableStateOf<CustomCommitment?>(null) }
     val customCommitments by viewModel.customCommitments.collectAsState()
 
@@ -1631,6 +1681,18 @@ fun DashboardScreen(
                         onClick = {
                             selectedCommitment = commitment
                             showEditCommitments = true
+                        },
+                        onEdit = {
+                            selectedCommitment = commitment
+                            showEditCommitments = true
+                        },
+                        onDelete = {
+                            selectedCommitment = commitment
+                            showConfirmDeleteAlert = true
+                        },
+                        onReminder = {
+                            selectedCommitment = commitment
+                            showReminderDialog = true
                         }
                     )
                 }
@@ -2138,6 +2200,53 @@ fun DashboardScreen(
             )
         }
 
+        if (showConfirmDeleteAlert && selectedCommitment != null) {
+            AlertDialog(
+                onDismissRequest = { showConfirmDeleteAlert = false },
+                title = { Text("Delete alert?".translate(language), color = Color.White) },
+                text = {
+                    Text(
+                        text = selectedCommitment?.notes?.ifBlank { "This alert" }?.plus(" will be removed.")
+                            ?.translate(language) ?: "",
+                        color = Color(0xFF9AA59F)
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            selectedCommitment?.let { viewModel.deleteCommitment(it.id) }
+                            showConfirmDeleteAlert = false
+                            selectedCommitment = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF5C67),
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Text("Delete".translate(language), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmDeleteAlert = false }) {
+                        Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+                    }
+                },
+                containerColor = Color(0xFF1C1C1E)
+            )
+        }
+
+        if (showReminderDialog && selectedCommitment != null) {
+            ReminderPickerDialog(
+                commitment = selectedCommitment!!,
+                language = language,
+                onDismiss = { showReminderDialog = false },
+                onSelect = { minutes ->
+                    viewModel.setCommitmentReminder(selectedCommitment!!.id, minutes)
+                    showReminderDialog = false
+                }
+            )
+        }
+
         if (showEditCommitments) {
             EditCommitmentDialog(
                 commitment = selectedCommitment,
@@ -2154,6 +2263,70 @@ fun DashboardScreen(
             )
         }
     }
+}
+
+/** Sets or clears the reminder for an alert. A null selection removes the reminder. */
+@Composable
+fun ReminderPickerDialog(
+    commitment: CustomCommitment,
+    language: LanguageType,
+    onDismiss: () -> Unit,
+    onSelect: (Int?) -> Unit
+) {
+    val options = listOf(
+        null to "No reminder",
+        60 to "1 hour before",
+        1440 to "1 day before",
+        10080 to "1 week before"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Reminder".translate(language),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+            }
+        },
+        containerColor = Color(0xFF1C1C1E),
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                options.forEach { (minutes, label) ->
+                    val selected = commitment.reminderMinutesBefore == minutes
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected) Color(0xFF1B241F) else Color.Transparent)
+                            .clickable { onSelect(minutes) }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(label.translate(language), color = Color.White)
+                        if (selected) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF19C37D),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

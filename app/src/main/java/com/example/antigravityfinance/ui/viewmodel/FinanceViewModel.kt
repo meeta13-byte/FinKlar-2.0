@@ -210,7 +210,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                         amount = obj.optDouble("amount", 0.0),
                         day = obj.optInt("day", 1),
-                        notes = obj.optString("notes", "")
+                        notes = obj.optString("notes", ""),
+                        reminderMinutesBefore = if (obj.has("reminderMinutesBefore") && !obj.isNull("reminderMinutesBefore")) {
+                            obj.optInt("reminderMinutesBefore")
+                        } else {
+                            null
+                        },
                     )
                 )
             }
@@ -238,6 +243,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         saveCustomCommitmentsToPref(current)
     }
 
+    /** Sets or clears the reminder time for an alert. */
+    fun setCommitmentReminder(commitmentId: String, minutesBefore: Int?) {
+        val existing = _customCommitments.value.firstOrNull { it.id == commitmentId } ?: return
+        addOrUpdateCommitment(existing.copy(reminderMinutesBefore = minutesBefore))
+    }
+
     private fun saveCustomCommitmentsToPref(list: List<CustomCommitment>) {
         val jsonArray = org.json.JSONArray()
         list.forEach {
@@ -246,6 +257,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             obj.put("amount", it.amount)
             obj.put("day", it.day)
             obj.put("notes", it.notes)
+            it.reminderMinutesBefore?.let { m -> obj.put("reminderMinutesBefore", m) }
             jsonArray.put(obj)
         }
         securityHelper.saveCustomCommitmentsJson(jsonArray.toString())
@@ -1463,5 +1475,7 @@ data class CustomCommitment(
     val id: String = java.util.UUID.randomUUID().toString(),
     val amount: Double,
     val day: Int,
-    val notes: String = ""
+    val notes: String = "",
+    /** Minutes before the due day at which the alert fires; null = no reminder. */
+    val reminderMinutesBefore: Int? = null,
 )
