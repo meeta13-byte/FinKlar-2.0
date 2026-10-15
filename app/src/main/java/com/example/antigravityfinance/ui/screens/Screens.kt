@@ -1033,6 +1033,254 @@ fun AlertCard(
         }
     }
 }
+/**
+ * Home card for linked bank accounts. Handles the empty, single and many-account cases.
+ * Accounts are discovered from parsed transaction notifications, so the empty state means
+ * "nothing detected yet" rather than an error.
+ */
+@Composable
+fun BankAccountsCard(
+    accountCount: Int,
+    accounts: List<BankAccount>,
+    currencySymbol: String,
+    language: LanguageType,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(0.7.dp, Color(0xFF26312C)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF151B18), Color(0xFF101412))
+                )
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF1B241F), CircleShape)
+                        .border(0.5.dp, Color(0xFF26312C), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.AccountBalance,
+                        contentDescription = null,
+                        tint = Color(0xFF19C37D),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "Bank accounts".translate(language),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = InterFontFamily
+                        ),
+                        color = Color(0xFFF4F7F5)
+                    )
+                    Text(
+                        text = when (accountCount) {
+                            0 -> "No accounts detected yet".translate(language)
+                            1 -> "1 linked bank account".translate(language)
+                            else -> "$accountCount linked bank accounts".translate(language)
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                        color = Color(0xFF9AA59F)
+                    )
+                    if (accountCount > 0) {
+                        Text(
+                            text = accounts.take(MAX_ACCOUNTS_PREVIEWED)
+                                .joinToString(", ") { "${it.bankName} ••${it.last4}" } +
+                                if (accountCount > MAX_ACCOUNTS_PREVIEWED) " +${accountCount - MAX_ACCOUNTS_PREVIEWED}" else "",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                            color = Color(0xFF19C37D)
+                        )
+                    }
+                }
+            }
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = Color(0xFF9AA59F)
+            )
+        }
+    }
+}
+
+private const val MAX_ACCOUNTS_PREVIEWED = 2
+
+/** Full list of detected bank accounts: name, last four digits and balance when known. */
+@Composable
+fun BankAccountsScreen(
+    accounts: List<BankAccount>,
+    currencySymbol: String,
+    language: LanguageType,
+    onDismiss: () -> Unit,
+    onDelete: ((BankAccount) -> Unit)? = null
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.8f)
+            .shadow(24.dp, RoundedCornerShape(24.dp))
+            .border(1.dp, Color(0xFF26312C), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF080A09))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF1B241F), RoundedCornerShape(12.dp))
+                        .border(0.7.dp, Color(0xFF26312C), RoundedCornerShape(12.dp))
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color(0xFFF4F7F5),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Text(
+                    text = "Bank Accounts".translate(language),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFFF4F7F5)
+                )
+                Box(modifier = Modifier.size(40.dp))
+            }
+
+            when {
+                accounts.isEmpty() -> Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.AccountBalance,
+                            contentDescription = null,
+                            tint = Color(0xFF26312C),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = "No bank accounts detected yet".translate(language),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF9AA59F)
+                        )
+                        Text(
+                            text = "Accounts appear automatically once a bank transaction notification is read.".translate(language),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF5F6B66),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+
+                else -> androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(accounts, key = { it.id }) { account ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF101412))
+                                .border(0.7.dp, Color(0xFF26312C), RoundedCornerShape(14.dp))
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF1B241F), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Rounded.AccountBalance,
+                                    contentDescription = null,
+                                    tint = Color(0xFF19C37D),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = account.bankName,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = InterFontFamily
+                                    ),
+                                    color = Color(0xFFF4F7F5)
+                                )
+                                Text(
+                                    text = "•••• ${account.last4}".translate(language),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = InterFontFamily),
+                                    color = Color(0xFF9AA59F)
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = account.lastKnownBalance?.let {
+                                        "$currencySymbol${String.format("%,.0f", it)}"
+                                    } ?: "—",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = InterFontFamily
+                                    ),
+                                    color = Color(0xFF58C7F5)
+                                )
+                                if (onDelete != null) {
+                                    Text(
+                                        text = "Remove".translate(language),
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFFF5C67),
+                                        modifier = Modifier.clickable { onDelete(account) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun WalletBalanceCard(
@@ -1161,6 +1409,7 @@ fun DashboardScreen(
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showAddWalletDialog by remember { mutableStateOf(false) }
     var showWalletDetailId by remember { mutableStateOf<Int?>(null) }
+    var showBankAccountsDialog by remember { mutableStateOf(false) }
     var showEditCommitments by remember { mutableStateOf(false) }
     var selectedCommitment by remember { mutableStateOf<CustomCommitment?>(null) }
     val customCommitments by viewModel.customCommitments.collectAsState()
@@ -1431,6 +1680,43 @@ fun DashboardScreen(
                 }
             }
         }
+
+        // Bank Accounts Section (above Wallet Balances)
+        val bankAccounts by viewModel.bankAccounts.collectAsState()
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(16.dp)
+                        .background(Color(0xFF19C37D), RoundedCornerShape(1.5.dp))
+                )
+                Text(
+                    text = "Bank Accounts".translate(language),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFontFamily
+                    ),
+                    color = Color(0xFFF4F7F5)
+                )
+            }
+        }
+
+        BankAccountsCard(
+            accountCount = bankAccounts.size,
+            accounts = bankAccounts,
+            currencySymbol = currency.symbol,
+            language = language,
+            onClick = { showBankAccountsDialog = true }
+        )
 
         // Wallet Balances Section
         Row(
@@ -1786,6 +2072,17 @@ fun DashboardScreen(
                         }
                     )
                 }
+            }
+        }
+
+        if (showBankAccountsDialog) {
+            Dialog(onDismissRequest = { showBankAccountsDialog = false }) {
+                BankAccountsScreen(
+                    accounts = bankAccounts,
+                    currencySymbol = currency.symbol,
+                    language = language,
+                    onDismiss = { showBankAccountsDialog = false }
+                )
             }
         }
 
