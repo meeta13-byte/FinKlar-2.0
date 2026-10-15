@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ForeignKey
 import androidx.room.Index
+import com.example.antigravityfinance.data.model.BankAccount
 import com.example.antigravityfinance.data.model.Budget
 import com.example.antigravityfinance.data.model.BudgetPeriod
 import com.example.antigravityfinance.data.model.Investment
@@ -30,7 +31,8 @@ data class TransactionEntity(
     val isIncome: Boolean = false,
     val isRecurring: Boolean = false,
     val detectedFromSms: Boolean = false,
-    val walletId: Int? = null
+    val walletId: Int? = null,
+    val bankAccountId: Int? = null
 ) {
     fun toDomain(): Transaction = Transaction(
         id = id,
@@ -44,7 +46,8 @@ data class TransactionEntity(
         isIncome = isIncome,
         isRecurring = isRecurring,
         detectedFromSms = detectedFromSms,
-        walletId = walletId
+        walletId = walletId,
+        bankAccountId = bankAccountId
     )
 
     companion object {
@@ -60,7 +63,8 @@ data class TransactionEntity(
             isIncome = domain.isIncome,
             isRecurring = domain.isRecurring,
             detectedFromSms = domain.detectedFromSms,
-            walletId = domain.walletId
+            walletId = domain.walletId,
+            bankAccountId = domain.bankAccountId
         )
     }
 }
@@ -218,7 +222,8 @@ data class WalletEntity(
     val isDefault: Boolean,
     val createdAt: Long,
     val investedAmount: Double = 0.0,
-    val initialAmount: Double = 0.0
+    val initialAmount: Double = 0.0,
+    val linkedBankAccountId: Int? = null
 ) {
     fun toDomain(): Wallet = Wallet(
         id = id,
@@ -228,7 +233,8 @@ data class WalletEntity(
         isDefault = isDefault,
         createdAt = createdAt,
         investedAmount = investedAmount,
-        initialAmount = initialAmount
+        initialAmount = initialAmount,
+        linkedBankAccountId = linkedBankAccountId
     )
 
     companion object {
@@ -240,7 +246,38 @@ data class WalletEntity(
             isDefault = domain.isDefault,
             createdAt = domain.createdAt,
             investedAmount = domain.investedAmount,
-            initialAmount = domain.initialAmount
+            initialAmount = domain.initialAmount,
+            linkedBankAccountId = domain.linkedBankAccountId
+        )
+    }
+}
+
+@Entity(
+    tableName = "bank_accounts",
+    indices = [Index(value = ["bankName", "last4"], unique = true)]
+)
+data class BankAccountEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val bankName: String,
+    val last4: String,
+    val lastKnownBalance: Double? = null,
+    val lastSeenAt: Long = System.currentTimeMillis()
+) {
+    fun toDomain(): BankAccount = BankAccount(
+        id = id,
+        bankName = bankName,
+        last4 = last4,
+        lastKnownBalance = lastKnownBalance,
+        lastSeenAt = lastSeenAt
+    )
+
+    companion object {
+        fun fromDomain(domain: BankAccount): BankAccountEntity = BankAccountEntity(
+            id = domain.id,
+            bankName = domain.bankName,
+            last4 = domain.last4,
+            lastKnownBalance = domain.lastKnownBalance,
+            lastSeenAt = domain.lastSeenAt
         )
     }
 }

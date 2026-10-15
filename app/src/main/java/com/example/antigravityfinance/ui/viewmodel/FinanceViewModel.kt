@@ -38,6 +38,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val goalRepository = GoalRepository(db.savingsGoalDao())
     val investmentRepository = InvestmentRepository(db.investmentDao())
     val walletRepository = WalletRepository(db.walletDao(), db.walletTransferDao(), db.transactionDao(), db)
+    val bankAccountRepository = BankAccountRepository(db.bankAccountDao())
+
+    /** Bank accounts discovered from parsed notifications/SMS. */
+    val bankAccounts: StateFlow<List<BankAccount>> = bankAccountRepository.allBankAccounts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
 
     // --- SECURITY FLOW STATE ---
@@ -1063,7 +1068,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun scanSmsInbox(onComplete: (addedCount: Int, balance: Double?) -> Unit) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _isSmsScanning.value = true
-            val result = com.example.antigravityfinance.service.sms.SmsInboxScanner.reconcileInbox(getApplication(), transactionRepository)
+            val result = com.example.antigravityfinance.service.sms.SmsInboxScanner.reconcileInbox(getApplication(), transactionRepository, bankAccountRepository)
             _isSmsScanning.value = false
             
             if (result.latestBalance != null) {
@@ -1080,7 +1085,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun reconcileSmsInbox() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _isSmsScanning.value = true
-            val result = com.example.antigravityfinance.service.sms.SmsInboxScanner.reconcileInbox(getApplication(), transactionRepository)
+            val result = com.example.antigravityfinance.service.sms.SmsInboxScanner.reconcileInbox(getApplication(), transactionRepository, bankAccountRepository)
             _isSmsScanning.value = false
             
             if (result.latestBalance != null) {
@@ -1204,6 +1209,41 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             3 -> AccentCrimson
             4 -> AccentSky
             else -> null
+        }
+    }
+
+    // --- BANK ACCOUNT ACTIONS ---
+
+    /** Transactions visible in [walletId], honouring a wallet's bank account restriction. */
+    fun transactionsForWallet(walletId: Int): Flow<List<Transaction>> =
+        walletRepository.getTransactionsForWallet(walletId)
+
+    /** Balances of a wallet follow the same restriction as its transaction list. */
+    fun recomputeWalletBalance(walletId: Int) {
+        viewModelScope.launch { walletRepository.updateWalletBalance(walletId) }
+    }
+
+    /** [bankAccountId] = null means "all bank accounts" feed this wallet. */
+    fun setWalletBankAccount(walletId: Int, bankAccountId: Int?) {
+        viewModelScope.launch {
+            walletRepository.setLinkedBankAccount(walletId, bankAccountId)
+            // A wallet that was previously linked to this account now needs its balance
+            // recomputed against the new filter.
+            allWallets.value.forEach { wallet ->
+                if (wallet.id != walletId && wallet.linkedBankAccountId != null) {
+                    walletRepository.updateWalletBalance(wallet.id)
+                }
+            }
+        }
+    }
+
+    fun deleteBankAccount(account: BankAccount) {
+        viewModelScope.launch {
+            allWallets.value.filter { it.linkedBankAccountId == account.id }.forEach {
+                walletRepository.setLinkedBankAccount(it.id, null)
+            }
+            db.transactionDao().clearBankAccount(account.id)
+            db.bankAccountDao().delete(account.id)
         }
     }
 

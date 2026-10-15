@@ -550,6 +550,15 @@ class SecurityHelper(private val context: Context) {
             .apply()
     }
 
+    // Optional "Sync alerts to calendar" toggle.
+    fun saveCalendarSyncEnabled(enabled: Boolean) {
+        sharedPrefs.edit().putBoolean("calendar_sync_enabled", enabled).apply()
+    }
+
+    fun isCalendarSyncEnabled(): Boolean {
+        return sharedPrefs.getBoolean("calendar_sync_enabled", false)
+    }
+
     fun saveCustomCommitmentsJson(json: String) {
         sharedPrefs.edit().putString("custom_commitments", json).apply()
     }

@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.example.antigravityfinance.data.local.db.*
 import com.example.antigravityfinance.data.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 
 class WalletRepository(
@@ -27,9 +28,26 @@ class WalletRepository(
     }
 
     fun getTransactionsForWallet(walletId: Int): Flow<List<Transaction>> {
-        return transactionDao.getTransactionsByWallet(walletId).map { list ->
-            list.map { it.toDomain() }
+        return walletDao.getWalletByIdFlow(walletId).flatMapLatest { wallet ->
+            transactionDao.getTransactionsByWallet(walletId, wallet?.linkedBankAccountId)
+                .map { list -> list.map { it.toDomain() } }
         }
+    }
+
+    /** Restricts a wallet to one bank account, or to all of them when [bankAccountId] is null. */
+    suspend fun setLinkedBankAccount(walletId: Int, bankAccountId: Int?) {
+        val wallet = walletDao.getWalletById(walletId) ?: return
+        // Only one wallet may claim a given bank account.
+        walletDao.getAllWalletsList()
+            .filter { it.linkedBankAccountId == bankAccountId && bankAccountId != null && it.id != walletId }
+            .forEach { walletDao.update(it.copy(linkedBankAccountId = null)) }
+        walletDao.update(wallet.copy(linkedBankAccountId = bankAccountId))
+        updateWalletBalance(walletId)
+    }
+
+    suspend fun updateWalletBalance(walletId: Int) {
+        val wallet = walletDao.getWalletById(walletId) ?: return
+        walletDao.update(wallet.copy(balance = recomputeWalletBalance(walletId)))
     }
 
     suspend fun getWalletById(id: Int): Wallet? {
@@ -95,8 +113,9 @@ class WalletRepository(
     }
 
     suspend fun recomputeWalletBalance(walletId: Int): Double {
-        val income = walletDao.getIncomeSum(walletId) ?: 0.0
-        val expense = walletDao.getExpenseSum(walletId) ?: 0.0
+        val bankAccountId = walletDao.getWalletById(walletId)?.linkedBankAccountId
+        val income = walletDao.getIncomeSum(walletId, bankAccountId) ?: 0.0
+        val expense = walletDao.getExpenseSum(walletId, bankAccountId) ?: 0.0
         val transfersIn = walletDao.getTransfersInSum(walletId) ?: 0.0
         val transfersOut = walletDao.getTransfersOutSum(walletId) ?: 0.0
         return income - expense + transfersIn - transfersOut

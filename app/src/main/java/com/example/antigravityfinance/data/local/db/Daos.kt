@@ -17,6 +17,14 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE amount = :amount AND merchant = :merchant AND ABS(date - :date) < :timeThreshold")
     suspend fun findPotentialDuplicates(amount: Double, merchant: String, date: Long, timeThreshold: Long): List<TransactionEntity>
 
+    /**
+     * Duplicate check restricted to rows this app itself read from a notification.
+     * Manual entries and OCR receipts are excluded: matching one of those is not
+     * evidence that the notification was already stored.
+     */
+    @Query("SELECT * FROM transactions WHERE amount = :amount AND merchant = :merchant AND detectedFromSms = 1 AND ABS(date - :date) < :timeThreshold LIMIT 1")
+    suspend fun findRecentSmsDuplicate(amount: Double, merchant: String, date: Long, timeThreshold: Long): TransactionEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: TransactionEntity): Long
 
@@ -29,14 +37,18 @@ interface TransactionDao {
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions(): Unit
 
-    @Query("SELECT * FROM transactions WHERE walletId = :walletId ORDER BY date DESC")
-    fun getTransactionsByWallet(walletId: Int): Flow<List<TransactionEntity>>
+    @Query("SELECT * FROM transactions WHERE walletId = :walletId AND (:bankAccountId IS NULL OR bankAccountId = :bankAccountId) ORDER BY date DESC")
+    fun getTransactionsByWallet(walletId: Int, bankAccountId: Int?): Flow<List<TransactionEntity>>
 
     @Query("UPDATE transactions SET walletId = :newWalletId WHERE walletId = :oldWalletId")
     suspend fun moveTransactionsToWallet(oldWalletId: Int, newWalletId: Int)
 
     @Query("UPDATE transactions SET walletId = NULL WHERE walletId = :walletId")
     suspend fun clearWalletForTransactions(walletId: Int)
+
+    /** Unlinking a bank account keeps the transactions, it only detaches them. */
+    @Query("UPDATE transactions SET bankAccountId = NULL WHERE bankAccountId = :bankAccountId")
+    suspend fun clearBankAccount(bankAccountId: Int)
 }
 
 @Dao
@@ -128,6 +140,9 @@ interface WalletDao {
     @Query("SELECT * FROM wallets WHERE id = :id")
     suspend fun getWalletById(id: Int): WalletEntity?
 
+    @Query("SELECT * FROM wallets WHERE id = :id")
+    fun getWalletByIdFlow(id: Int): Flow<WalletEntity?>
+
     @Query("SELECT * FROM wallets WHERE isDefault = 1 LIMIT 1")
     suspend fun getDefaultWallet(): WalletEntity?
 
@@ -140,11 +155,11 @@ interface WalletDao {
     @Delete
     suspend fun delete(wallet: WalletEntity)
 
-    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 1")
-    suspend fun getIncomeSum(walletId: Int): Double?
+    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 1 AND (:bankAccountId IS NULL OR bankAccountId = :bankAccountId)")
+    suspend fun getIncomeSum(walletId: Int, bankAccountId: Int?): Double?
 
-    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 0")
-    suspend fun getExpenseSum(walletId: Int): Double?
+    @Query("SELECT SUM(amount) FROM transactions WHERE walletId = :walletId AND status = 'CONFIRMED' AND isIncome = 0 AND (:bankAccountId IS NULL OR bankAccountId = :bankAccountId)")
+    suspend fun getExpenseSum(walletId: Int, bankAccountId: Int?): Double?
 
     @Query("SELECT SUM(amount) FROM wallet_transfers WHERE toWalletId = :walletId")
     suspend fun getTransfersInSum(walletId: Int): Double?
@@ -152,11 +167,39 @@ interface WalletDao {
     @Query("SELECT SUM(amount) FROM wallet_transfers WHERE fromWalletId = :walletId")
     suspend fun getTransfersOutSum(walletId: Int): Double?
 
-    @Query("SELECT COUNT(*) FROM transactions WHERE walletId = :walletId")
-    suspend fun getTransactionCount(walletId: Int): Int
+    @Query("SELECT COUNT(*) FROM transactions WHERE walletId = :walletId AND (:bankAccountId IS NULL OR bankAccountId = :bankAccountId)")
+    suspend fun getTransactionCount(walletId: Int, bankAccountId: Int?): Int
 
     @Query("SELECT * FROM wallets ORDER BY createdAt ASC")
     suspend fun getAllWalletsList(): List<WalletEntity>
+
+    /** The wallet restricted to [bankAccountId], or null when no wallet is linked to it. */
+    @Query("SELECT * FROM wallets WHERE linkedBankAccountId = :bankAccountId LIMIT 1")
+    suspend fun getWalletByLinkedBankAccount(bankAccountId: Int): WalletEntity?
+}
+
+// Shortcut: a NULL :bankAccountId means "all bank accounts", which is what SQLite's
+// `:param IS NULL OR` gives us for free — one query serves both the unrestricted and the
+// single-account wallet instead of two near-identical queries per aggregate.
+@Dao
+interface BankAccountDao {
+    @Query("SELECT * FROM bank_accounts ORDER BY lastSeenAt DESC")
+    fun getAllBankAccounts(): Flow<List<BankAccountEntity>>
+
+    @Query("SELECT * FROM bank_accounts WHERE id = :id")
+    suspend fun getBankAccountById(id: Int): BankAccountEntity?
+
+    @Query("SELECT * FROM bank_accounts WHERE bankName = :bankName AND last4 = :last4 LIMIT 1")
+    suspend fun findByBankAndDigits(bankName: String, last4: String): BankAccountEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(account: BankAccountEntity): Long
+
+    @Query("UPDATE bank_accounts SET lastKnownBalance = :balance, lastSeenAt = :seenAt WHERE id = :id")
+    suspend fun updateSeen(id: Int, balance: Double?, seenAt: Long)
+
+    @Query("DELETE FROM bank_accounts WHERE id = :id")
+    suspend fun delete(id: Int)
 }
 
 @Dao

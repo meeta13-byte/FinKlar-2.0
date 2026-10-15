@@ -2,6 +2,7 @@ package com.example.antigravityfinance.data.repository
 
 import com.example.antigravityfinance.data.local.db.*
 import com.example.antigravityfinance.data.model.*
+import com.example.antigravityfinance.service.sms.detection.SmsDetectionResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -28,13 +29,15 @@ class TransactionRepository(
     private suspend fun adjustWalletBalance(walletId: Int?) {
         val targetId = walletId ?: walletDao.getDefaultWallet()?.id ?: return
         val wallet = walletDao.getWalletById(targetId) ?: return
-        
-        val income = walletDao.getIncomeSum(targetId) ?: 0.0
-        val expense = walletDao.getExpenseSum(targetId) ?: 0.0
+
+        // A wallet restricted to one bank account only counts that account's transactions.
+        val bankAccountId = wallet.linkedBankAccountId
+        val income = walletDao.getIncomeSum(targetId, bankAccountId) ?: 0.0
+        val expense = walletDao.getExpenseSum(targetId, bankAccountId) ?: 0.0
         val transfersIn = walletDao.getTransfersInSum(targetId) ?: 0.0
         val transfersOut = walletDao.getTransfersOutSum(targetId) ?: 0.0
         val computedBalance = income - expense + transfersIn - transfersOut
-        
+
         walletDao.update(wallet.copy(balance = computedBalance))
     }
 
@@ -43,7 +46,11 @@ class TransactionRepository(
     }
 
     suspend fun insertTransaction(transaction: Transaction): Int {
-        val targetWalletId = transaction.walletId ?: walletDao.getDefaultWallet()?.id
+        // Default: every account feeds the default wallet. When the user has restricted a
+        // wallet to one bank account, that wallet receives only that account's transactions.
+        val targetWalletId = transaction.walletId
+            ?: transaction.bankAccountId?.let { walletDao.getWalletByLinkedBankAccount(it)?.id }
+            ?: walletDao.getDefaultWallet()?.id
         val finalTransaction = transaction.copy(walletId = targetWalletId)
         val entity = TransactionEntity.fromDomain(finalTransaction)
         val id = transactionDao.insert(entity).toInt()
@@ -148,6 +155,13 @@ class TransactionRepository(
         return null
     }
 
+    /**
+     * Duplicate check for notification ingestion. Only rows this app itself read from a
+     * notification count as duplicates, over a two-minute window.
+     */
+    suspend fun findRecentSmsDuplicate(amount: Double, merchant: String, date: Long): Transaction? =
+        transactionDao.findRecentSmsDuplicate(amount, merchant, date, 120_000L)?.toDomain()
+
     suspend fun isMerchantAutoConfirm(merchant: String): Boolean {
         val merchantName = merchant.trim().uppercase()
         val record = recurringMerchantDao.getRecurringMerchant(merchantName)
@@ -213,6 +227,45 @@ class TransactionRepository(
                 adjustWalletBalance(targetWalletId)
             }
         }
+    }
+}
+
+/**
+ * Bank accounts are discovered from the notifications the app already parses — there is no
+ * separate bank connection. A detection carries a bank name and the last four digits, and
+ * those two together are the account identity.
+ */
+class BankAccountRepository(private val bankAccountDao: BankAccountDao) {
+    val allBankAccounts: Flow<List<BankAccount>> = bankAccountDao.getAllBankAccounts().map { list ->
+        list.map { it.toDomain() }
+    }
+
+    suspend fun getBankAccountById(id: Int): BankAccount? =
+        bankAccountDao.getBankAccountById(id)?.toDomain()
+
+    /**
+     * Records the account seen in [result] and refreshes its balance. Returns the account
+     * id, or null when the notification carried no usable account digits.
+     */
+    suspend fun recordDetection(result: SmsDetectionResult): Int? {
+        val bankName = result.bankName.trim().takeIf { it.isNotBlank() && it != "Unknown Bank" } ?: return null
+        val last4 = result.accountLastDigits?.takeIf { it.length == 4 } ?: return null
+
+        val existing = bankAccountDao.findByBankAndDigits(bankName, last4)
+        val id = if (existing != null) {
+            bankAccountDao.updateSeen(existing.id, result.availableBalance, result.smsTimestamp)
+            existing.id
+        } else {
+            bankAccountDao.insert(
+                BankAccountEntity(
+                    bankName = bankName,
+                    last4 = last4,
+                    lastKnownBalance = result.availableBalance,
+                    lastSeenAt = result.smsTimestamp
+                )
+            ).toInt()
+        }
+        return id
     }
 }
 
