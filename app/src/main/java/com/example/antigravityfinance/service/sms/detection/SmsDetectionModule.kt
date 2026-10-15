@@ -119,6 +119,32 @@ object SmsDetectionModule {
             return null
         }
 
+        /**
+         * Statement/ledger shorthand: "A/c XX1234 Cr. 1200.00" or "Dr. 500.00". These carry
+         * no debit/credit verb and no currency symbol, so [extractAmount] cannot read them.
+         * Returns the amount together with the direction the suffix states.
+         */
+        fun extractLedgerAmount(text: String): Pair<Double, TransactionType>? {
+            val pattern = Pattern.compile(
+                "(?:a/c|a\\.c|acct|account)[^\\n]{0,24}?\\b(cr|dr)\\.?\\s*" +
+                    "(?:rs\\.?|inr|₹|\\p{Sc})?\\s*([\\d,]+(?:\\.\\d{1,2})?)",
+                Pattern.CASE_INSENSITIVE
+            )
+            val matcher = pattern.matcher(text)
+            if (matcher.find()) {
+                val amount = matcher.group(2).replace(",", "").toDoubleOrNull()
+                if (amount != null && amount > 0.0) {
+                    val type = if (matcher.group(1).equals("cr", ignoreCase = true)) {
+                        TransactionType.CREDIT
+                    } else {
+                        TransactionType.DEBIT
+                    }
+                    return amount to type
+                }
+            }
+            return null
+        }
+
         fun extractUpiId(text: String): String? {
             val pattern = Pattern.compile("[a-zA-Z0-9.\\-_]+@[a-zA-Z]{3,}", Pattern.CASE_INSENSITIVE)
             val matcher = pattern.matcher(text)
@@ -130,7 +156,9 @@ object SmsDetectionModule {
 
         fun extractRefNumber(text: String): String? {
             val patterns = listOf(
-                "(?:upi\\s+ref\\s+no|ref\\s+no|txn\\s+id|upi\\s+ref|ref)\\s*[:\\-\\s#]*([a-zA-Z0-9]{8,16})",
+                // "No." in "UPI Ref No. 5234..." must be consumed as a separator,
+                // otherwise the reference is never captured and the SMS is discarded.
+                "(?:upi\\s+ref\\s+no|ref\\s+no|txn\\s+id|upi\\s+ref|ref)\\s*[:\\-\\s#.]*([a-zA-Z0-9]{8,16})",
                 "txn\\s+([a-zA-Z0-9]{8,16})"
             )
             for (regex in patterns) {
@@ -206,7 +234,9 @@ object SmsDetectionModule {
         val extractedBank = BankVerifier.getPotentialBankFromSender(senderId)
         
         // 1. Extractions
-        val amount = TransactionExtractor.extractAmount(body)
+        var amount = TransactionExtractor.extractAmount(body)
+        val ledger = if (amount == null) TransactionExtractor.extractLedgerAmount(body) else null
+        if (ledger != null) amount = ledger.first
         val maskedAcc = TransactionExtractor.extractMaskedAccount(body)
         val upiId = TransactionExtractor.extractUpiId(body)
         val refNo = TransactionExtractor.extractRefNumber(body)
@@ -216,11 +246,18 @@ object SmsDetectionModule {
         // 2. Identify transaction keywords
         val creditKeywords = listOf("credited", "credited to", "deposited", "deposit", "received", "salary", "refund", "cashback", "reversed", "reversal",
             "money received", "amount received", "upi cr", "cr.", "cr ")
+        // "wdl"/"atm wdl" is the ATM shorthand several banks use instead of "withdrawn".
         val debitKeywords = listOf("debited", "debited from", "spent", "charged", "withdrawn", "withdrawal", "paid", "payment", "sent", "purchase",
-            "deducted", "upi dr", "dr.", "dr ", "transaction successful", "txn successful", "transfer successful")
+            "deducted", "upi dr", "dr.", "dr ", "wdl", "transaction successful", "txn successful", "transfer successful")
 
-        val hasCreditWord = creditKeywords.any { text.contains(it) } || text.contains("cr")
-        val hasDebitWord = debitKeywords.any { text.contains(it) } || text.contains("dr")
+        // Whole-word only. A bare substring match flipped "CREDIT CARD" and "UPI/CRDT"
+        // debits into income.
+        fun containsWord(text: String, word: String) =
+            Pattern.compile("\\b${Pattern.quote(word)}\\.?", Pattern.CASE_INSENSITIVE)
+                .matcher(text).find()
+
+        val hasCreditWord = creditKeywords.any { containsWord(text, it) }
+        val hasDebitWord = debitKeywords.any { containsWord(text, it) }
 
         var detectedType = TransactionType.NONE
         if (hasCreditWord && !hasDebitWord) {
@@ -235,6 +272,8 @@ object SmsDetectionModule {
                 detectedType = TransactionType.CREDIT
             }
         }
+        // An explicit ledger suffix states the direction outright and outranks any verb.
+        if (ledger != null) detectedType = ledger.second
 
         // 3. Scoring System
         var score = 0
@@ -261,6 +300,13 @@ object SmsDetectionModule {
         if (maskedAcc != null) {
             score += 15
             reason.add("Masked account/card number detected (+15)")
+        }
+
+        // Ledger suffix ("A/c XX1234 Cr. 1200.00") is an unambiguous bank-statement
+        // marker and carries no merchant, so it is weighted like an account number.
+        if (ledger != null) {
+            score += 15
+            reason.add("Ledger Cr/Dr statement format detected (+15)")
         }
 
         // Balance
