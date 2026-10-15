@@ -9,6 +9,8 @@ import com.example.antigravityfinance.data.local.db.SplitEntity
 import com.example.antigravityfinance.data.model.*
 import com.example.antigravityfinance.data.repository.*
 import com.example.antigravityfinance.service.ai.AiAssistantService
+import com.example.antigravityfinance.service.calendar.CalendarSync
+import kotlinx.coroutines.Dispatchers
 import com.example.antigravityfinance.service.ocr.OcrScanner
 import com.example.antigravityfinance.service.security.SecurityHelper
 import com.example.antigravityfinance.theme.*
@@ -198,6 +200,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _customCommitments = MutableStateFlow<List<CustomCommitment>>(loadCustomCommitmentsFromPref())
     val customCommitments: StateFlow<List<CustomCommitment>> = _customCommitments.asStateFlow()
 
+    // --- ALERT / CALENDAR SYNC STATE ---
+    private val _isCalendarSyncEnabled = MutableStateFlow(securityHelper.isCalendarSyncEnabled())
+    val isCalendarSyncEnabled: StateFlow<Boolean> = _isCalendarSyncEnabled.asStateFlow()
+
     private fun loadCustomCommitmentsFromPref(): List<CustomCommitment> {
         val raw = securityHelper.getCustomCommitmentsJson() ?: return emptyList()
         val list = mutableListOf<CustomCommitment>()
@@ -216,6 +222,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         } else {
                             null
                         },
+                        calendarEventId = if (obj.has("calendarEventId") && !obj.isNull("calendarEventId")) {
+                            obj.optLong("calendarEventId")
+                        } else {
+                            null
+                        }
                     )
                 )
             }
@@ -228,6 +239,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun addOrUpdateCommitment(commitment: CustomCommitment) {
         val current = _customCommitments.value.toMutableList()
         val index = current.indexOfFirst { it.id == commitment.id }
+        val previous = if (index >= 0) current[index] else null
         if (index >= 0) {
             current[index] = commitment
         } else {
@@ -235,18 +247,88 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
         _customCommitments.value = current
         saveCustomCommitmentsToPref(current)
+        syncCommitmentToCalendar(commitment, previous)
     }
 
     fun deleteCommitment(commitmentId: String) {
+        val existing = _customCommitments.value.firstOrNull { it.id == commitmentId }
         val current = _customCommitments.value.filter { it.id != commitmentId }
         _customCommitments.value = current
         saveCustomCommitmentsToPref(current)
+        // Deleting an alert removes its calendar event too.
+        existing?.let { CalendarSync.deleteEvent(getApplication(), it.calendarEventId) }
     }
 
-    /** Sets or clears the reminder time for an alert. */
+    /** Sets or clears the reminder time for an alert, mirroring it to the calendar. */
     fun setCommitmentReminder(commitmentId: String, minutesBefore: Int?) {
         val existing = _customCommitments.value.firstOrNull { it.id == commitmentId } ?: return
         addOrUpdateCommitment(existing.copy(reminderMinutesBefore = minutesBefore))
+    }
+
+    private fun syncCommitmentToCalendar(commitment: CustomCommitment, previous: CustomCommitment?) {
+        if (!securityHelper.isCalendarSyncEnabled()) {
+            // Feature off: remove any event created earlier so nothing is left behind.
+            val eventId = commitment.calendarEventId ?: return
+            CalendarSync.deleteEvent(getApplication(), eventId)
+            setCalendarEventId(commitment.id, null)
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val eventId = CalendarSync.upsertEvent(
+                context = getApplication(),
+                eventId = commitment.calendarEventId,
+                title = commitment.notes.ifBlank { "FinKlar alert" },
+                startTimeMillis = nextOccurrenceOf(commitment.day),
+                reminderMinutesBefore = commitment.reminderMinutesBefore
+            ) ?: return@launch
+
+            setCalendarEventId(commitment.id, eventId)
+            if (previous?.calendarEventId != null && previous.calendarEventId != eventId) {
+                CalendarSync.deleteEvent(getApplication(), previous.calendarEventId)
+            }
+        }
+    }
+
+    private fun setCalendarEventId(commitmentId: String, eventId: Long?) {
+        val updated = _customCommitments.value.map {
+            if (it.id == commitmentId) it.copy(calendarEventId = eventId) else it
+        }
+        _customCommitments.value = updated
+        saveCustomCommitmentsToPref(updated)
+    }
+
+    /** Turns calendar sync on or off, creating or removing events to match. */
+    fun setCalendarSyncEnabled(enabled: Boolean) {
+        securityHelper.saveCalendarSyncEnabled(enabled)
+        _isCalendarSyncEnabled.value = enabled
+        if (enabled) {
+            // Push every alert that has no event yet.
+            _customCommitments.value.filter { it.calendarEventId == null }
+                .forEach { syncCommitmentToCalendar(it, null) }
+        } else {
+            _customCommitments.value.forEach {
+                CalendarSync.deleteEvent(getApplication(), it.calendarEventId)
+            }
+            val cleared = _customCommitments.value.map { it.copy(calendarEventId = null) }
+            _customCommitments.value = cleared
+            saveCustomCommitmentsToPref(cleared)
+        }
+    }
+
+    /** Next calendar date whose day-of-month is [day], used as the alert start time. */
+    private fun nextOccurrenceOf(day: Int): Long {
+        val calendar = java.util.Calendar.getInstance()
+        val daysInMonth = calendar.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        val today = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val target = day.coerceIn(1, daysInMonth)
+        if (target <= today) calendar.add(java.util.Calendar.MONTH, 1)
+        calendar.set(java.util.Calendar.DAY_OF_MONTH, target)
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 9)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
     }
 
     private fun saveCustomCommitmentsToPref(list: List<CustomCommitment>) {
@@ -258,6 +340,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             obj.put("day", it.day)
             obj.put("notes", it.notes)
             it.reminderMinutesBefore?.let { m -> obj.put("reminderMinutesBefore", m) }
+            it.calendarEventId?.let { e -> obj.put("calendarEventId", e) }
             jsonArray.put(obj)
         }
         securityHelper.saveCustomCommitmentsJson(jsonArray.toString())
@@ -1478,4 +1561,6 @@ data class CustomCommitment(
     val notes: String = "",
     /** Minutes before the due day at which the alert fires; null = no reminder. */
     val reminderMinutesBefore: Int? = null,
+    /** Calendar event created for this alert, kept in sync on every edit and delete. */
+    val calendarEventId: Long? = null
 )

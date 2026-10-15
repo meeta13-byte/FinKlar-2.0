@@ -1081,6 +1081,7 @@ fun AlertCard(
         }
     }
 }
+
 /**
  * Home card for linked bank accounts. Handles the empty, single and many-account cases.
  * Accounts are discovered from parsed transaction notifications, so the empty state means
@@ -5158,6 +5159,51 @@ fun SettingsScreen(
             Switch(
                 checked = isInvestmentsEnabled,
                 onCheckedChange = { viewModel.updateInvestmentsEnabled(it) }
+            )
+        }
+
+        Divider()
+
+        val isCalendarSyncEnabled by viewModel.isCalendarSyncEnabled.collectAsState()
+        val calendarPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+        ) { granted ->
+            // Alerts keep working either way; sync simply stays off when denied.
+            if (granted.values.all { it }) {
+                viewModel.setCalendarSyncEnabled(true)
+            } else {
+                viewModel.setCalendarSyncEnabled(false)
+                android.widget.Toast.makeText(context, "Calendar permission denied".translate(language), android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Sync alerts to calendar".translate(language), fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Adds each alert to the calendar of ${viewModel.userEmail.collectAsState().value.ifBlank { "your account" }}".translate(language),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Switch(
+                checked = isCalendarSyncEnabled,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        viewModel.setCalendarSyncEnabled(false)
+                    } else {
+                        // Permissions are requested only here, when the user opts in.
+                        calendarPermissionLauncher.launch(
+                            arrayOf(
+                                android.Manifest.permission.READ_CALENDAR,
+                                android.Manifest.permission.WRITE_CALENDAR
+                            )
+                        )
+                    }
+                }
             )
         }
 
