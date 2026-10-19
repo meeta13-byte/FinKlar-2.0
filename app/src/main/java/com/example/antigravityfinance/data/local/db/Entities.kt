@@ -1,5 +1,6 @@
 package com.example.antigravityfinance.data.local.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ForeignKey
@@ -33,6 +34,11 @@ data class TransactionEntity(
     val detectedFromSms: Boolean = false,
     val walletId: Int? = null,
     val bankAccountId: Int? = null,
+    // The default is declared so Room's expected schema matches what MIGRATION_5_6
+    // produces. SQLite requires a default when ALTER TABLE adds a NOT NULL column, so
+    // the migration cannot omit it; without this the two disagree and Room throws
+    // "Migration didn't properly handle: transactions" on every existing install.
+    @ColumnInfo(defaultValue = "'MANUAL'")
     val source: String = "MANUAL"
 ) {
     fun toDomain(): Transaction = Transaction(
