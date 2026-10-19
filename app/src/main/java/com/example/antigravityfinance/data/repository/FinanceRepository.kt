@@ -36,6 +36,8 @@ class TransactionRepository(
         val expense = walletDao.getExpenseSum(targetId, bankAccountId) ?: 0.0
         val transfersIn = walletDao.getTransfersInSum(targetId) ?: 0.0
         val transfersOut = walletDao.getTransfersOutSum(targetId) ?: 0.0
+        // initialAmount is a spending budget, not an opening balance, so it stays out of
+        // this total; the opening figure is already an "Initial Income Setup" transaction.
         val computedBalance = income - expense + transfersIn - transfersOut
 
         walletDao.update(wallet.copy(balance = computedBalance))

@@ -21,7 +21,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         WalletTransferEntity::class,
         BankAccountEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
@@ -152,6 +152,23 @@ abstract class FinanceDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the ingest source so inbox reconciliation can tell a row it can re-verify
+         * from one it cannot.
+         *
+         * Deliberately no backfill: rows written before this column are all marked
+         * detectedFromSms and cannot be attributed to the receiver, the inbox scanner or
+         * the notification listener, so any guess risks silently deleting a real
+         * transaction. They default to MANUAL and are never removed by a reconcile pass.
+         * The cost is that older rows keep their transactions when their SMS is deleted;
+         * new rows are classified correctly.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'MANUAL'")
+            }
+        }
+
         fun getDatabase(context: Context): FinanceDatabase {
             return INSTANCE ?: synchronized(this) {
                 val securityHelper = SecurityHelper(context.applicationContext)
@@ -165,7 +182,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                     "finance_secure_db"
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
                 
                 INSTANCE = instance

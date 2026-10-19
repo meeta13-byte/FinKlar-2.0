@@ -19,7 +19,18 @@ import com.example.antigravityfinance.service.sms.detection.TransactionType
 object NotificationIngestor {
     private const val TAG = "TxNotificationListener"
 
-    suspend fun ingest(context: Context, body: String, senderId: String, timestamp: Long) {
+    /**
+     * [source] records which path this message arrived by: SMS_RECEIVED for the broadcast
+     * receiver, NOTIFICATION for the listener. Only SMS_INBOX rows are re-verifiable
+     * against the inbox, so the two must not be conflated.
+     */
+    suspend fun ingest(
+        context: Context,
+        body: String,
+        senderId: String,
+        timestamp: Long,
+        source: String
+    ) {
         try {
             val securityHelper = SecurityHelper(context.applicationContext)
             val trustedSenders = securityHelper.getTrustedSenders()
@@ -40,7 +51,11 @@ object NotificationIngestor {
 
             result.availableBalance?.let { securityHelper.saveSyncedBalance(it) }
 
-            val merchant = result.merchantOrSender.ifBlank { senderId }
+            // Fall back to the sender's contact name before the raw sender id, so a payment to a
+            // saved contact reads as that person rather than a phone number.
+            val merchant = resolveMerchant(result.merchantOrSender, senderId) {
+                com.example.antigravityfinance.service.sms.SmsInboxScanner.getContactName(context, senderId)
+            }
             val bankAccountId = bankAccountRepository.recordDetection(result)
 
             // Only a previously notification-derived row counts as a duplicate.
@@ -60,7 +75,10 @@ object NotificationIngestor {
                 status = TransactionStatus.CONFIRMED,
                 isIncome = result.transactionType == TransactionType.CREDIT,
                 detectedFromSms = true,
-                bankAccountId = bankAccountId
+                bankAccountId = bankAccountId,
+                // Not SMS_INBOX: these banks post notifications rather than sending
+                // messages, so the inbox reconciler cannot re-verify them.
+                source = source
             )
             repo.insertTransaction(tx)
             Log.i(TAG, "STORED ${tx.amount} ${if (tx.isIncome) "credit" else "debit"} '$tx.merchant'")
@@ -68,4 +86,19 @@ object NotificationIngestor {
             Log.e(TAG, "FAILED to ingest from $senderId: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
+
+    /**
+     * Picks the merchant to store: the name the detector found, else the sender's saved
+     * contact name, else the sender id. Never leaves the literal "Unknown Merchant" in the
+     * database when the sender is known.
+     */
+    fun resolveMerchant(detected: String, senderId: String, contactName: () -> String?): String {
+        if (detected.isNotBlank() && detected != UNKNOWN_MERCHANT) return detected
+        val senderUsable = senderId.isNotBlank() && senderId != "Unknown"
+        if (!senderUsable) return detected.ifBlank { UNKNOWN_MERCHANT }
+        val contact = contactName()
+        return contact ?: senderId
+    }
+
+    private const val UNKNOWN_MERCHANT = "Unknown Merchant"
 }

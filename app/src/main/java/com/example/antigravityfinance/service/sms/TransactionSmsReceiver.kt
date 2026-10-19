@@ -76,7 +76,7 @@ class TransactionSmsReceiver : BroadcastReceiver() {
             }
             // The SMS receiver and the notification listener share one ingestion path so
             // the two sources cannot drift apart.
-            NotificationIngestor.ingest(context, body, senderId, timestamp)
+            NotificationIngestor.ingest(context, body, senderId, timestamp, "SMS_RECEIVED")
         }
     }
 }

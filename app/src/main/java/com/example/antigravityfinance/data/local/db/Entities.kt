@@ -32,7 +32,8 @@ data class TransactionEntity(
     val isRecurring: Boolean = false,
     val detectedFromSms: Boolean = false,
     val walletId: Int? = null,
-    val bankAccountId: Int? = null
+    val bankAccountId: Int? = null,
+    val source: String = "MANUAL"
 ) {
     fun toDomain(): Transaction = Transaction(
         id = id,
@@ -47,7 +48,8 @@ data class TransactionEntity(
         isRecurring = isRecurring,
         detectedFromSms = detectedFromSms,
         walletId = walletId,
-        bankAccountId = bankAccountId
+        bankAccountId = bankAccountId,
+        source = source
     )
 
     companion object {
@@ -64,7 +66,8 @@ data class TransactionEntity(
             isRecurring = domain.isRecurring,
             detectedFromSms = domain.detectedFromSms,
             walletId = domain.walletId,
-            bankAccountId = domain.bankAccountId
+            bankAccountId = domain.bankAccountId,
+            source = domain.source
         )
     }
 }

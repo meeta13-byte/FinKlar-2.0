@@ -84,7 +84,7 @@ class TransactionNotificationListenerService : NotificationListenerService() {
             texts.forEachIndexed { index, text ->
                 val body = if (texts.size == 1) "$title $text".trim() else text
                 Log.i(TAG, "RECEIVED [$index] from $packageName ('$sender'): $body")
-                NotificationIngestor.ingest(applicationContext, body, sender, timestamp)
+                NotificationIngestor.ingest(applicationContext, body, sender, timestamp, "NOTIFICATION")
             }
         }
     }
