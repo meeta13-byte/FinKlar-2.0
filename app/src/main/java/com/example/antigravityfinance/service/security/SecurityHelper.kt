@@ -550,6 +550,27 @@ class SecurityHelper(private val context: Context) {
             .apply()
     }
 
+    // --- TOTP ---
+    // The TOTP secret is a credential: anyone holding it can mint valid codes, so it is
+    // stored encrypted like the API keys and never written in the clear.
+
+    fun saveTotpSecret(secret: String) {
+        val enc = encrypt(secret) ?: return
+        sharedPrefs.edit().putString("totp_secret", enc).apply()
+    }
+
+    fun getTotpSecret(): String {
+        return decrypt(sharedPrefs.getString("totp_secret", null)) ?: ""
+    }
+
+    fun clearTotpSecret() {
+        sharedPrefs.edit().remove("totp_secret").apply()
+    }
+
+    fun isTotpEnabled(): Boolean {
+        return getTotpSecret().isNotBlank()
+    }
+
     // Optional "Sync alerts to calendar" toggle.
     fun saveCalendarSyncEnabled(enabled: Boolean) {
         sharedPrefs.edit().putBoolean("calendar_sync_enabled", enabled).apply()

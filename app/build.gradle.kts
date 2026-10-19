@@ -7,7 +7,7 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.ksp)
   alias(libs.plugins.kotlin.android)
-  alias(libs.plugins.google.services)
+  // google-services removed with Firebase Auth; app/google-services.json is no longer read.
 }
 
 // Gemini API key is loaded from the gitignored local.properties (or a GEMINI_API_KEY
@@ -126,10 +126,9 @@ dependencies {
   // Graphics Path 16KB alignment compliance
   implementation(libs.androidx.graphics.path)
 
-  // Firebase Phone Authentication.
-  // Versions come from the BoM; firebase-auth must NOT pin a version.
-  implementation(platform(libs.firebase.bom))
-  implementation(libs.firebase.auth)
+  // Note: Firebase Authentication was removed. Phone Auth requires the paid Blaze plan,
+  // and no other Firebase product was in use. Sign-in is now a TOTP code verified
+  // on-device (see TotpManager), with no remote service involved.
 }
 
 
