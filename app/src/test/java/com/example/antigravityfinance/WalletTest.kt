@@ -226,8 +226,13 @@ class WalletTest {
         val transactionDao = FakeTransactionDao()
         val repository = WalletRepository(walletDao, transferDao, transactionDao)
 
+        // A wallet's opening balance is recorded as an income transaction (see
+        // FinanceViewModel.addInitialIncome), because the stored `balance` is derived
+        // rather than an input.
         val w1Id = walletDao.insert(WalletEntity(name = "Wallet 1", balance = 2000.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
         val w2Id = walletDao.insert(WalletEntity(name = "Wallet 2", balance = 500.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
+        walletDao.transactions.add(TransactionEntity(amount = 2000.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w1Id))
+        walletDao.transactions.add(TransactionEntity(amount = 500.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w2Id))
 
         repository.transferMoney(fromWalletId = w1Id, toWalletId = w2Id, amount = 300.0, note = "Test transfer")
 
@@ -249,6 +254,8 @@ class WalletTest {
 
         val w1Id = walletDao.insert(WalletEntity(name = "Wallet 1", balance = 100.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
         val w2Id = walletDao.insert(WalletEntity(name = "Wallet 2", balance = 500.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
+        walletDao.transactions.add(TransactionEntity(amount = 100.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w1Id))
+        walletDao.transactions.add(TransactionEntity(amount = 500.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w2Id))
 
         try {
             repository.transferMoney(fromWalletId = w1Id, toWalletId = w2Id, amount = 300.0, note = "Fail transfer")
@@ -266,40 +273,38 @@ class WalletTest {
     }
 
     @Test
-    fun testDefaultWalletAndConstraintDeletionRules() = runBlocking {
+    fun testDeleteWalletReassignsDefaultAndTransactions() = runBlocking {
+        // Behaviour since commit 23f2b7c: deleting a wallet is allowed, and its
+        // transactions and transfers move to a surviving wallet rather than being
+        // blocked. The older "cannot delete default / non-zero / has transactions"
+        // rules were removed deliberately, so these assert the reassignment instead.
         val walletDao = FakeWalletDao()
         val transferDao = FakeWalletTransferDao()
         val transactionDao = FakeTransactionDao()
         val repository = WalletRepository(walletDao, transferDao, transactionDao)
 
-        // Rule 1: Default spending wallet cannot be deleted
+        // Rule 1: the default wallet can be deleted, and another wallet becomes default.
         val defaultWalletId = walletDao.insert(WalletEntity(id = 1, name = "Default Spending Wallet", balance = 0.0, purpose = null, isDefault = true, createdAt = 0)).toInt()
-        val defaultWallet = repository.getWalletById(defaultWalletId)!!
-        val deletedDefault = repository.deleteWallet(defaultWallet)
-        assertFalse(deletedDefault)
-        assertNotNull(walletDao.getWalletById(defaultWalletId))
+        val otherWalletId = walletDao.insert(WalletEntity(id = 2, name = "Savings", balance = 0.0, purpose = null, isDefault = false, createdAt = 1)).toInt()
+        transactionDao.list.add(TransactionEntity(id = 10, amount = 100.0, merchant = "A", date = 0, category = "B", isIncome = true, status = "CONFIRMED", walletId = defaultWalletId))
+        transferDao.transfers.add(WalletTransferEntity(id = 1, fromWalletId = defaultWalletId, toWalletId = otherWalletId, amount = 50.0, note = null, timestamp = 0))
 
-        // Rule 2: Wallet with non-zero balance cannot be deleted
-        val nonZeroWalletId = walletDao.insert(WalletEntity(id = 2, name = "Non-zero Wallet", balance = 150.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
-        val nonZeroWallet = repository.getWalletById(nonZeroWalletId)!!
-        val deletedNonZero = repository.deleteWallet(nonZeroWallet)
-        assertFalse(deletedNonZero)
-        assertNotNull(walletDao.getWalletById(nonZeroWalletId))
+        val deletedDefault = repository.deleteWallet(repository.getWalletById(defaultWalletId)!!)
+        assertTrue(deletedDefault)
+        assertNull(walletDao.getWalletById(defaultWalletId))
+        assertTrue(walletDao.getWalletById(otherWalletId)!!.isDefault)
 
-        // Rule 3: Wallet with transaction history cannot be deleted
-        val hasTxWalletId = walletDao.insert(WalletEntity(id = 3, name = "Has Transactions Wallet", balance = 0.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
-        walletDao.transactions.add(TransactionEntity(amount = 100.0, merchant = "A", date = 0, category = "B", isIncome = true, status = "CONFIRMED", walletId = hasTxWalletId))
-        val hasTxWallet = repository.getWalletById(hasTxWalletId)!!
-        val deletedHasTx = repository.deleteWallet(hasTxWallet)
-        assertFalse(deletedHasTx)
-        assertNotNull(walletDao.getWalletById(hasTxWalletId))
+        // Its transactions and transfers are reassigned, not destroyed.
+        assertEquals(otherWalletId, transactionDao.getTransactionById(10)!!.walletId)
+        assertEquals(0, transferDao.transfers.size)
 
-        // Rule 4: Normal empty wallet can be deleted
-        val cleanWalletId = walletDao.insert(WalletEntity(id = 4, name = "Clean Wallet", balance = 0.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
-        val cleanWallet = repository.getWalletById(cleanWalletId)!!
-        val deletedClean = repository.deleteWallet(cleanWallet)
-        assertTrue(deletedClean)
-        assertNull(walletDao.getWalletById(cleanWalletId))
+        // Rule 2: a wallet with history and a non-zero balance is still deletable,
+        // because its history moves to a surviving wallet.
+        val nonZeroWalletId = walletDao.insert(WalletEntity(id = 3, name = "Non-zero Wallet", balance = 150.0, purpose = null, isDefault = false, createdAt = 2)).toInt()
+        transactionDao.list.add(TransactionEntity(id = 11, amount = 25.0, merchant = "B", date = 0, category = "B", isIncome = false, status = "CONFIRMED", walletId = nonZeroWalletId))
+        assertTrue(repository.deleteWallet(repository.getWalletById(nonZeroWalletId)!!))
+        assertNull(walletDao.getWalletById(nonZeroWalletId))
+        assertEquals(otherWalletId, transactionDao.getTransactionById(11)!!.walletId)
     }
 
     @Test
@@ -365,8 +370,11 @@ class WalletTest {
         val repo = TransactionRepository(transactionDao, recurringMerchantDao, budgetDao, walletDao)
 
         // Set up wallets
+        // Opening balances are income transactions, since `balance` is derived.
         val w1Id = walletDao.insert(WalletEntity(id = 1, name = "Wallet 1", balance = 500.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
         val w2Id = walletDao.insert(WalletEntity(id = 2, name = "Wallet 2", balance = 1000.0, purpose = null, isDefault = false, createdAt = 0)).toInt()
+        transactionDao.list.add(TransactionEntity(id = 20, amount = 500.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w1Id))
+        transactionDao.list.add(TransactionEntity(id = 21, amount = 1000.0, merchant = "Opening", date = 0, category = "SALARY", isIncome = true, status = "CONFIRMED", walletId = w2Id))
 
         // Set up transaction belonging to Wallet 1 (amount = 100.0, expense/debit, confirmed)
         val txId = transactionDao.insert(TransactionEntity(id = 10, amount = 100.0, merchant = "M", date = 0, category = "Food", isIncome = false, status = "CONFIRMED", walletId = w1Id)).toInt()
@@ -378,12 +386,12 @@ class WalletTest {
         val updatedTx = transactionDao.getTransactionById(txId)
         assertEquals(w2Id, updatedTx!!.walletId)
 
-        // Verify balances shifted:
-        // Wallet 1 should get +100 back (since debit was removed) = 600.0
-        // Wallet 2 should get -100 (since debit was added) = 900.0
+        // Balances are recomputed from transactions rather than adjusted by a delta, so
+        // Wallet 1 is left with just its 500 opening income, and Wallet 2 carries the
+        // debit: 1000 - 100 = 900.
         val w1Updated = walletDao.getWalletById(w1Id)
         val w2Updated = walletDao.getWalletById(w2Id)
-        assertEquals(600.0, w1Updated!!.balance, 0.0)
+        assertEquals(500.0, w1Updated!!.balance, 0.0)
         assertEquals(900.0, w2Updated!!.balance, 0.0)
     }
 
