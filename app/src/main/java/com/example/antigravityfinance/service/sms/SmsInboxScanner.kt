@@ -39,22 +39,29 @@ object SmsInboxScanner {
         var latestBalance: Double? = null
         var latestBalanceTimestamp: Long = 0
         var maxTimestamp: Long = 0
-        
+
         val parsedSmsList = mutableListOf<Transaction>()
-        
+        var inboxReadSucceeded = false
+
         try {
             val inboxUri = Uri.parse("content://sms/inbox")
             val projection = arrayOf("_id", "address", "body", "date")
             
             val cursor = context.contentResolver.query(
-                inboxUri, 
-                projection, 
-                null, 
-                null, 
+                inboxUri,
+                projection,
+                null,
+                null,
                 "date DESC"
             )
-            
-            cursor?.use { c ->
+
+            if (cursor == null) {
+                // A null cursor is not an empty inbox, it is an unreadable one.
+                Log.w("SmsInboxScanner", "Inbox query returned no cursor")
+                return SyncSmsResult(0, null, 0L)
+            }
+
+            cursor.use { c ->
                 val bodyIndex = c.getColumnIndexOrThrow("body")
                 val dateIndex = c.getColumnIndexOrThrow("date")
                 val addressIndex = c.getColumnIndexOrThrow("address")
@@ -84,7 +91,8 @@ object SmsInboxScanner {
                             status = TransactionStatus.CONFIRMED,
                             isIncome = result.transactionType == TransactionType.CREDIT,
                             detectedFromSms = true,
-                            bankAccountId = bankAccountRepository.recordDetection(result)
+                            bankAccountId = bankAccountRepository.recordDetection(result),
+                            source = "SMS_INBOX"
                         )
                         parsedSmsList.add(transaction)
                         
@@ -100,8 +108,17 @@ object SmsInboxScanner {
                     }
                 }
             }
+            inboxReadSucceeded = true
         } catch (e: Exception) {
             Log.e("SmsInboxScanner", "Error scanning SMS inbox for reconciliation", e)
+        }
+
+        if (!inboxReadSucceeded) {
+            // The inbox could not be read, so an empty parse list means "unknown", not
+            // "these SMS were deleted". Reconciling against it would remove every
+            // SMS-sourced transaction in the database.
+            Log.w("SmsInboxScanner", "Inbox unreadable; skipping reconciliation")
+            return SyncSmsResult(0, null, maxTimestamp)
         }
         
         val dbTransactions = kotlinx.coroutines.runBlocking {
@@ -127,7 +144,12 @@ object SmsInboxScanner {
         
         
         // 3. Delete only SMS-derived transactions that are no longer found in SMS.
-        for (dbTx in dbTransactions.filter { it.detectedFromSms }) {
+        //
+        // Restricted to rows that were actually read from the SMS inbox. Transactions the
+        // notification listener stored carry the same detectedFromSms flag but have no SMS
+        // behind them, because those banks post notifications instead of sending messages;
+        // without this guard every one of them was deleted on the next app launch.
+        for (dbTx in dbTransactions.filter { it.detectedFromSms && it.source == "SMS_INBOX" }) {
             val foundInSms = parsedSmsList.any { smsTx ->
                 smsTx.amount == dbTx.amount &&
                 smsTx.isIncome == dbTx.isIncome &&

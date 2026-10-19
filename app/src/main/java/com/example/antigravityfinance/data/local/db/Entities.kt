@@ -1,5 +1,6 @@
 package com.example.antigravityfinance.data.local.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ForeignKey
@@ -32,7 +33,13 @@ data class TransactionEntity(
     val isRecurring: Boolean = false,
     val detectedFromSms: Boolean = false,
     val walletId: Int? = null,
-    val bankAccountId: Int? = null
+    val bankAccountId: Int? = null,
+    // The default is declared so Room's expected schema matches what MIGRATION_5_6
+    // produces. SQLite requires a default when ALTER TABLE adds a NOT NULL column, so
+    // the migration cannot omit it; without this the two disagree and Room throws
+    // "Migration didn't properly handle: transactions" on every existing install.
+    @ColumnInfo(defaultValue = "'MANUAL'")
+    val source: String = "MANUAL"
 ) {
     fun toDomain(): Transaction = Transaction(
         id = id,
@@ -47,7 +54,8 @@ data class TransactionEntity(
         isRecurring = isRecurring,
         detectedFromSms = detectedFromSms,
         walletId = walletId,
-        bankAccountId = bankAccountId
+        bankAccountId = bankAccountId,
+        source = source
     )
 
     companion object {
@@ -64,7 +72,8 @@ data class TransactionEntity(
             isRecurring = domain.isRecurring,
             detectedFromSms = domain.detectedFromSms,
             walletId = domain.walletId,
-            bankAccountId = domain.bankAccountId
+            bankAccountId = domain.bankAccountId,
+            source = domain.source
         )
     }
 }

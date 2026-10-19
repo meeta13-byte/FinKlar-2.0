@@ -118,6 +118,10 @@ class WalletRepository(
         val expense = walletDao.getExpenseSum(walletId, bankAccountId) ?: 0.0
         val transfersIn = walletDao.getTransfersInSum(walletId) ?: 0.0
         val transfersOut = walletDao.getTransfersOutSum(walletId) ?: 0.0
+        // NOTE: initialAmount is deliberately NOT included here. It is the spending
+        // budget the wallet tracks against ("Set / Spent / Remaining"), not an opening
+        // balance. Adding it would double-count the opening figure, which is already
+        // recorded as the "Initial Income Setup" transaction by addInitialIncome().
         return income - expense + transfersIn - transfersOut
     }
 

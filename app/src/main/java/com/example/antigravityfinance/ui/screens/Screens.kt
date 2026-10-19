@@ -1183,6 +1183,9 @@ fun BankAccountsScreen(
     onDismiss: () -> Unit,
     onDelete: ((BankAccount) -> Unit)? = null
 ) {
+    // Removing a linked account also unlinks the wallet that follows it and detaches its
+    // transactions, so it asks for confirmation rather than acting on the first tap.
+    var pendingDeleteAccount by remember { mutableStateOf<BankAccount?>(null) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1254,7 +1257,7 @@ fun BankAccountsScreen(
                         Text(
                             text = "Accounts appear automatically once a bank transaction notification is read.".translate(language),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF5F6B66),
+                            color = Color(0xFF9AA59F),
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     }
@@ -1315,11 +1318,18 @@ fun BankAccountsScreen(
                                     color = Color(0xFF58C7F5)
                                 )
                                 if (onDelete != null) {
+                                    // Material's 48 dp minimum, so the row is comfortably
+                                    // tappable; the bare text box was not.
                                     Text(
                                         text = "Remove".translate(language),
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         color = Color(0xFFFF5C67),
-                                        modifier = Modifier.clickable { onDelete(account) }
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { pendingDeleteAccount = account }
+                                            .defaultMinSize(minHeight = 48.dp)
+                                            .padding(horizontal = 8.dp, vertical = 12.dp)
                                     )
                                 }
                             }
@@ -1328,6 +1338,46 @@ fun BankAccountsScreen(
                 }
             }
         }
+    }
+
+    pendingDeleteAccount?.let { account ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAccount = null },
+            containerColor = Color(0xFF1C1C1E),
+            title = {
+                Text(
+                    text = "Remove ${account.bankName}?".translate(language),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "Any wallet following this account will follow all bank accounts again. Transactions already recorded are kept.".translate(language),
+                    color = Color(0xFF9AA59F)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete?.invoke(account)
+                        pendingDeleteAccount = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF5C67),
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Remove".translate(language), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteAccount = null }) {
+                    Text("Cancel".translate(language), color = Color(0xFF8E8E93))
+                }
+            }
+        )
     }
 }
 
@@ -1646,15 +1696,6 @@ fun DashboardScreen(
                     color = Color(0xFFF4F7F5)
                 )
             }
-            Text(
-                text = "View all >".translate(language),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = InterFontFamily
-                ),
-                color = Color(0xFF19C37D),
-                modifier = Modifier.clickable { }
-            )
         }
 
         Row(
@@ -1806,15 +1847,6 @@ fun DashboardScreen(
                     color = Color(0xFFF4F7F5)
                 )
             }
-            Text(
-                text = "View all >".translate(language),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Medium,
-                    fontFamily = InterFontFamily
-                ),
-                color = Color(0xFF19C37D),
-                modifier = Modifier.clickable { }
-            )
         }
 
         Column(
@@ -2144,7 +2176,8 @@ fun DashboardScreen(
                     accounts = bankAccounts,
                     currencySymbol = currency.symbol,
                     language = language,
-                    onDismiss = { showBankAccountsDialog = false }
+                    onDismiss = { showBankAccountsDialog = false },
+                    onDelete = { account -> viewModel.deleteBankAccount(account) }
                 )
             }
         }

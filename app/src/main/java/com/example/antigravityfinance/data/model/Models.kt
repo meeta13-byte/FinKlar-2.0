@@ -61,7 +61,12 @@ data class Transaction(
     val detectedFromSms: Boolean = false,
     val walletId: Int? = null,
     /** Bank account this was read from; null for manual, OCR and voice entries. */
-    val bankAccountId: Int? = null
+    val bankAccountId: Int? = null,
+    /**
+     * Which ingest path produced this row: SMS_RECEIVED, SMS_INBOX, NOTIFICATION, or
+     * MANUAL. Only rows this app can re-verify against the inbox are SMS_INBOX.
+     */
+    val source: String = "MANUAL"
 )
 
 @Serializable

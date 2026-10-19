@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 import com.google.ai.client.generativeai.GenerativeModel
-import com.google.firebase.auth.FirebaseAuth
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -89,37 +88,27 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isGoogleSheetsSyncing = MutableStateFlow(false)
     val isGoogleSheetsSyncing: StateFlow<Boolean> = _isGoogleSheetsSyncing.asStateFlow()
 
-    // ------------------------------------------------------------------
-    // Backend base URL
-    //
-    // TODO(ACTION REQUIRED): this still points at the OLD Firebase project
-    //   "finklar-3c10d" (region us-central1).
-    // The app now lives in Firebase project "finklar-b84a9" (see
-    // app/google-services.json). Replace the region and project id below with
-    // the new project's Cloud Functions values before any backend call is used.
-    //
-    // The old custom OTP functions (sendOTP / verifyOTP) are no longer called:
-    // sign-in is handled by Firebase Phone Auth through PhoneAuthViewModel.
-    // ------------------------------------------------------------------
-    private val FUNCTIONS_BASE_URL: String = "https://us-central1-finklar-3c10d.cloudfunctions.net"
-
-    /** True when a Firebase user is signed in; FirebaseAuth is the source of truth. */
-    val isFirebaseUserSignedIn: Boolean
-        get() = FirebaseAuth.getInstance().currentUser != null
+    /**
+     * True when this install has completed sign-in. Registration is recorded locally by
+     * completeRegistration(); there is no remote session to restore.
+     *
+     * This MUST depend only on isRegistered(). An earlier version also required
+     * isTotpEnabled(), which the current passcode flow never sets, so onboarding could
+     * never dismiss and the app appeared not to open.
+     */
+    val isVerifiedOnDevice: Boolean
+        get() = securityHelper.isRegistered()
 
     /**
-     * Stable user id for data that used to be keyed by phone number.
-     * Falls back to the stored uid, then empty. Never the phone number.
+     * Stable user id for data that used to be keyed by phone number. Generated locally
+     * once TOTP verification succeeds. Never the phone number.
      */
     val userId: String
-        get() = securityHelper.getUserUid().ifBlank {
-            FirebaseAuth.getInstance().currentUser?.uid ?: ""
-        }
+        get() = securityHelper.getUserUid()
 
     /**
-     * Completes registration after Firebase Phone Auth reports success.
-     * Stores the profile alongside the Firebase uid, which replaces the phone
-     * number as the identifier for this user.
+     * Completes registration after the first successful TOTP code. Stores the profile
+     * alongside the locally generated uid, which is the identifier for this user.
      */
     fun completeRegistration(uid: String, name: String, email: String, phone: String) {
         securityHelper.saveUserRegistration(name, email, phone, uid)
@@ -416,10 +405,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // --- INITIALIZATION ---
     init {
-        // A cached Firebase session survives app restarts. Without this, a returning
-        // user would be sent back to onboarding even though Firebase still has them
-        // signed in, because completeRegistration() only runs on OtpState.Success.
-        restoreFirebaseSession()
+        // Registration is stored locally, so a returning user is not sent back to onboarding.
+        restoreLocalSession()
 
         // Pre-load Gemini API key from the BuildConfig constant (sourced from local.properties)
         // if the user has not already saved one. Empty when no key is configured at build time.
@@ -1257,24 +1244,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Adopts a still-valid Firebase session on startup. Only fills in a profile when
-     * one has not already been saved, so it never overwrites user-entered details.
+     * Re-reads the stored profile on startup. Everything is local, so this only has to
+     * repopulate the state flows; there is no remote session to validate.
      */
-    private fun restoreFirebaseSession() {
-        val user = FirebaseAuth.getInstance().currentUser ?: return
-        val uid = user.uid
-        if (securityHelper.getUserUid() != uid) {
-            securityHelper.saveUserRegistration(
-                name = user.displayName ?: _userName.value,
-                email = user.email ?: _userEmail.value,
-                phone = user.phoneNumber ?: _userPhone.value,
-                uid = uid
-            )
-            _userName.value = securityHelper.getUserName()
-            _userEmail.value = securityHelper.getUserEmail()
-            _userPhone.value = securityHelper.getUserPhone()
-        }
-        _userUid.value = uid
+    private fun restoreLocalSession() {
+        if (!securityHelper.isRegistered()) return
+        _userName.value = securityHelper.getUserName()
+        _userEmail.value = securityHelper.getUserEmail()
+        _userPhone.value = securityHelper.getUserPhone()
+        _userUid.value = securityHelper.getUserUid()
         _isRegistered.value = true
     }
 

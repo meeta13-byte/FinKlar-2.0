@@ -5,6 +5,7 @@ import com.example.antigravityfinance.data.model.LanguageType
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,8 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.antigravityfinance.ui.viewmodel.FinanceViewModel
-import com.example.antigravityfinance.ui.viewmodel.OtpState
-import com.example.antigravityfinance.ui.viewmodel.PhoneAuthViewModel
+import com.example.antigravityfinance.ui.viewmodel.TotpAuthViewModel
+import com.example.antigravityfinance.ui.viewmodel.TotpState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Activity
 import android.content.Context
@@ -46,7 +47,6 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val activity = remember(context) { context.findActivity() }
     var phase by remember { mutableStateOf(OnboardingPhase.ENTER_DETAILS) }
 
     // Form inputs
@@ -58,12 +58,13 @@ fun OnboardingScreen(
     var agreedToTerms by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
 
-    val phoneAuth: PhoneAuthViewModel = viewModel()
-    val otpState by phoneAuth.state.collectAsState()
+    val totpAuth: TotpAuthViewModel = viewModel()
+    val totpState by totpAuth.state.collectAsState()
+    val secondsRemaining by totpAuth.secondsRemaining.collectAsState()
     val currentLanguage by viewModel.language.collectAsState()
 
-    val isSending = otpState is OtpState.Sending
-    val isVerifying = otpState is OtpState.Verifying
+    val isPreparing = totpState is TotpState.Preparing
+    val isVerifying = totpState is TotpState.Verifying
 
     // Error states
     var nameError by remember { mutableStateOf(false) }
@@ -71,20 +72,19 @@ fun OnboardingScreen(
     var phoneError by remember { mutableStateOf(false) }
     var otpError by remember { mutableStateOf(false) }
 
-    // Errors surfaced by Firebase Phone Auth (wrong code, too many requests, etc).
-    val otpMessage = (otpState as? OtpState.Error)?.message
+    val otpMessage = (totpState as? TotpState.Error)?.message
 
-    LaunchedEffect(otpState) {
-        when (val s = otpState) {
-            is OtpState.CodeSent -> {
+    LaunchedEffect(totpState) {
+        when (val s = totpState) {
+            is TotpState.AwaitingCode -> {
                 phase = OnboardingPhase.VERIFY_OTP
                 otpError = false
             }
-            is OtpState.Success -> viewModel.completeRegistration(
+            is TotpState.Success -> viewModel.completeRegistration(
                 uid = s.uid,
                 name = name.trim(),
                 email = email.trim(),
-                phone = "+91" + phone.trim()
+                phone = if (phone.trim().length == 10) "+91" + phone.trim() else phone.trim()
             )
             else -> Unit
         }
@@ -131,7 +131,7 @@ fun OnboardingScreen(
                     )
                 )
                 Text(
-                    text = "Offline-first smart personal money manager",
+                    text = "Sign in to your personal money manager",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Black.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center
@@ -162,13 +162,13 @@ fun OnboardingScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = "Create Your Account",
+                                    text = "Sign in",
                                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Start
                                 )
                                 Text(
-                                    text = "Please enter your details to register and verify your device via Twilio SMS.",
+                                    text = "Enter your details to continue to your account.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     modifier = Modifier.fillMaxWidth(),
@@ -305,7 +305,7 @@ fun OnboardingScreen(
                                                 )
                                                 
                                                 Text(
-                                                    text = "3. Twilio SMS Verification\nWe use Twilio SMS verification to uniquely bind your account to this device. Your phone number is only used to verify your identity and is not shared with any third party.",
+                                                    text = "3. Your Data Stays Here\nYour name, email and phone number are stored only on this device, encrypted in Android KeyStore. Nothing is transmitted to any server, and we never see your details.",
                                                     style = MaterialTheme.typography.bodyMedium
                                                 )
                                                 
@@ -503,29 +503,14 @@ fun OnboardingScreen(
                                     }
 
                                     Button(
-                                        onClick = {
-                                            val act = activity
-                                            if (act == null) {
-                                                Toast.makeText(context, "Could not start verification.", Toast.LENGTH_LONG).show()
-                                            } else {
-                                                phoneAuth.sendCode(act, "+91" + phone.trim())
-                                            }
-                                        },
-                                        enabled = !isSending && activity != null,
+                                        onClick = { totpAuth.beginSetup() },
+                                        enabled = !isPreparing,
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier
                                             .weight(1.5f)
                                             .height(50.dp)
                                     ) {
-                                        if (isSending) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                strokeWidth = 2.dp,
-                                                color = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                        } else {
-                                            Text("Send OTP & Continue".translate(currentLanguage), fontWeight = FontWeight.Bold)
-                                        }
+                                        Text("Next".translate(currentLanguage), fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -536,22 +521,35 @@ fun OnboardingScreen(
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Lock,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+
                                 Text(
-                                    text = "Enter Verification Code".translate(currentLanguage),
+                                    text = "Create your passcode".translate(currentLanguage),
                                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Start
+                                    textAlign = TextAlign.Center
                                 )
                                 Text(
-                                    text = if (otpState is OtpState.TimedOut) {
-                                        "Automatic code detection timed out. Enter the 6-digit code manually, or resend."
-                                    } else {
-                                        "${"We sent a 6-digit OTP code to".translate(currentLanguage)} +91$phone. ${"Please enter it below to confirm your phone number.".translate(currentLanguage)}"
-                                    },
+                                    text = "Choose a 6-digit passcode. You will use it to unlock FinKlar on this device.".translate(currentLanguage),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Start
+                                    textAlign = TextAlign.Center
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -561,24 +559,38 @@ fun OnboardingScreen(
                                         text = otpMessage,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
                                     )
                                 }
 
                                 OutlinedTextField(
                                     value = otp,
-                                    onValueChange = {
-                                        otp = it
-                                        otpError = false
+                                    onValueChange = { input ->
+                                        if (input.length <= 6 && input.all { it.isDigit() }) {
+                                            otp = input
+                                            otpError = false
+                                        }
                                     },
-                                    label = { Text("6-Digit OTP Code".translate(currentLanguage)) },
-                                    leadingIcon = { Icon(Icons.Rounded.Lock, contentDescription = null) },
+                                    label = { Text("Passcode".translate(currentLanguage)) },
                                     isError = otpError,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth(),
                                     textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center)
+                                )
+
+                                Text(
+                                    text = if (secondsRemaining > 0) {
+                                        "Securing your account in ${secondsRemaining}s".translate(currentLanguage)
+                                    } else {
+                                        "Your account is ready".translate(currentLanguage)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
                                 )
 
                                 Row(
@@ -592,14 +604,8 @@ fun OnboardingScreen(
                                         Text("Back".translate(currentLanguage))
                                     }
 
-                                    TextButton(
-                                        onClick = {
-                                            val act = activity
-                                            if (act != null) phoneAuth.resendCode(act)
-                                        },
-                                        enabled = !isSending && activity != null
-                                    ) {
-                                        Text("Resend Code".translate(currentLanguage))
+                                    TextButton(onClick = { totpAuth.beginSetup() }) {
+                                        Text("Restart".translate(currentLanguage))
                                     }
                                 }
 
@@ -609,26 +615,18 @@ fun OnboardingScreen(
                                     onClick = {
                                         otpError = otp.trim().length != 6
                                         if (!otpError) {
-                                            phoneAuth.verifyCode(otp.trim())
+                                            totpAuth.verify(otp.trim())
                                         } else {
-                                            Toast.makeText(context, "OTP must be exactly 6 digits".translate(currentLanguage), Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Code must be exactly 6 digits".translate(currentLanguage), Toast.LENGTH_SHORT).show()
                                         }
                                     },
-                                    enabled = !isVerifying,
+                                    enabled = !isVerifying && secondsRemaining == 0,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(50.dp)
                                 ) {
-                                    if (isVerifying) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    } else {
-                                        Text("Verify & Continue".translate(currentLanguage), fontWeight = FontWeight.Bold)
-                                    }
+                                    Text("Set Passcode".translate(currentLanguage), fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -644,11 +642,4 @@ fun OnboardingScreen(
             }
         }
     }
-}
-
-/** Resolves the hosting Activity, which PhoneAuthOptions.setActivity() requires. */
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
 }
