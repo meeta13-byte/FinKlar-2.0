@@ -18,7 +18,10 @@ import com.example.antigravityfinance.data.model.WalletTransfer
 
 @Entity(
     tableName = "transactions",
-    indices = [Index("walletId")]
+    // bankAccountId is declared because MIGRATION_4_5 creates its index. Without it
+    // Room's expected schema omits the index, the migrated database has it, and the
+    // two disagree - so every device that migrated past v4 crashed on the next launch.
+    indices = [Index("walletId"), Index("bankAccountId")]
 )
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
